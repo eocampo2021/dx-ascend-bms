@@ -1,26 +1,17 @@
-import express from "express";
-import cors from "cors";
-import path from "path";
-import apiRouter from "./api";
+import express from 'express';
+import cors from 'cors'; // Importar CORS
+import runtimeRoutes from './api/runtime.routes';
+import systemObjectsRoutes from './api/system-objects.routes'; // Importar nueva ruta
 
 const app = express();
 
-app.use(cors());
+// Middleware
+app.use(cors()); // Habilitar CORS para todas las rutas
 app.use(express.json());
+app.use(express.static('public'));
 
-// Carpeta de archivos estáticos (HTML, JS, CSS)
-const publicDir = path.join(__dirname, "..", "public");
-app.use(express.static(publicDir));
-
-// Ruta “linda” para ver una pantalla: /runtime/1, /runtime/2, etc.
-app.get("/runtime/:screenId", (req, res) => {
-  res.sendFile(path.join(publicDir, "runtime.html"));
-});
-
-app.use("/api", apiRouter);
-
-app.get("/", (req, res) => {
-  res.send("DX-Ascend Server v0.1 – API en /api");
-});
+// Routes
+app.use('/api/runtime', runtimeRoutes);
+app.use('/api/system-objects', systemObjectsRoutes); // Registrar ruta del arbol
 
 export default app;
