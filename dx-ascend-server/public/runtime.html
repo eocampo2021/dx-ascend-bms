@@ -2,84 +2,323 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>DX-Ascend Runtime</title>
+  <title>DX-Ascend Workstation</title>
   <style>
+    :root {
+      --ebo-green: #39a935;
+      --ebo-green-dark: #2f8d2c;
+      --ebo-gray: #f3f5f7;
+      --ebo-border: #d7dce0;
+      --ebo-text: #2f3a4a;
+      --ebo-muted: #708090;
+    }
+
     * {
       box-sizing: border-box;
     }
+
     body {
       margin: 0;
-      background: radial-gradient(circle at top left, #1d2733, #0b0d12);
-      color: #f5f5f5;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-        sans-serif;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(180deg, #f4f7f9 0%, #e8edf2 60%, #e1e7ed 100%);
+      color: var(--ebo-text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header + toolbar */
+    .ebo-header {
+      height: 52px;
+      background: var(--ebo-green);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+    }
+
+    .ebo-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .ebo-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #6dde6b, var(--ebo-green-dark));
+      display: grid;
+      place-items: center;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+      font-weight: 800;
+    }
+
+    .ebo-connection {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .status-led {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #f0c21a;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+    }
+
+    .status-led.online {
+      background: #4bd07b;
+    }
+
+    .ebo-toolbar {
+      background: #fff;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--ebo-border);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-right: 8px;
+      border-right: 1px solid var(--ebo-border);
+    }
+
+    .toolbar-btn {
+      background: linear-gradient(#ffffff, #f3f6f8);
+      border: 1px solid var(--ebo-border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: var(--ebo-text);
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      transition: all 0.1s ease;
+    }
+
+    .toolbar-btn:hover {
+      border-color: #b1bdc7;
+      background: #eef2f6;
+    }
+
+    /* Main layout */
+    .ebo-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 260px 1fr 280px;
+      gap: 12px;
+      padding: 12px 14px 0 14px;
       overflow: hidden;
     }
-    #screen-root {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      padding: 16px;
+
+    .panel {
+      background: #fff;
+      border: 1px solid var(--ebo-border);
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
+
+    .panel-title {
+      font-weight: 600;
+      font-size: 14px;
+      padding: 10px 12px;
+      background: #f7f9fb;
+      border-bottom: 1px solid var(--ebo-border);
+    }
+
+    .ebo-tree,
+    .ebo-inspector {
+      min-height: 0;
+    }
+
+    .tree-content,
+    .inspector-body {
+      padding: 10px 12px;
+      overflow: auto;
+      flex: 1;
+    }
+
+    .tree-list {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+      color: var(--ebo-text);
+    }
+
+    .tree-item {
+      padding: 6px 8px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .tree-item:hover {
+      background: #eef4f9;
+    }
+
+    .tree-item.selected {
+      background: rgba(57, 169, 53, 0.12);
+      border: 1px solid rgba(57, 169, 53, 0.35);
+    }
+
+    .tree-bullet {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      background: var(--ebo-green);
+      opacity: 0.75;
+    }
+
+    .tree-children {
+      list-style: none;
+      padding-left: 18px;
+      margin: 4px 0 0 0;
+      border-left: 1px solid var(--ebo-border);
+    }
+
+    /* Workspace */
+    .ebo-workspace {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .workspace-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fff;
+      border: 1px solid var(--ebo-border);
+      border-radius: 6px 6px 0 0;
+      padding: 10px 14px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+
+    .workspace-label {
+      font-size: 12px;
+      color: var(--ebo-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .workspace-screen {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .workspace-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .action-pill {
+      background: linear-gradient(#fefefe, #f3f4f6);
+      border: 1px solid var(--ebo-border);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--ebo-muted);
+    }
+
+    .workspace-canvas {
+      background: #fff;
+      border: 1px solid var(--ebo-border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.03);
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .runtime-surface {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: linear-gradient(135deg, #f7f9fc 0%, #eef2f6 50%, #e9eef3 100%);
+      border-radius: 4px;
+      border: 1px solid var(--ebo-border);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      overflow: hidden;
+    }
+
     #loading {
       position: absolute;
-      left: 16px;
-      top: 16px;
+      left: 12px;
+      top: 12px;
       font-size: 14px;
       opacity: 0.8;
     }
-    .screen-title {
-      position: absolute;
-      left: 16px;
-      top: 10px;
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-      text-shadow: 0 0 18px rgba(0, 245, 199, 0.55);
-    }
 
-    /* ---------- Widgets glass / glow ---------- */
-
+    /* Widget styling inspired by EBO cards */
     .widget {
       position: absolute;
-      border-radius: 16px;
-      padding: 6px 10px 12px 10px;
-      background: linear-gradient(
-          135deg,
-          rgba(255, 255, 255, 0.04),
-          rgba(0, 0, 0, 0.55)
-        ),
-        radial-gradient(circle at top left, rgba(0, 245, 199, 0.18), transparent 60%);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      box-shadow:
-        0 18px 40px rgba(0, 0, 0, 0.75),
-        0 0 18px rgba(0, 245, 199, 0.15);
-      backdrop-filter: blur(14px);
+      border-radius: 6px;
+      padding: 10px 12px 14px 12px;
+      background: linear-gradient(#ffffff, #f8fafc);
+      border: 1px solid var(--ebo-border);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+      color: var(--ebo-text);
       overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
     }
+
+    .widget:hover {
+      border-color: #b4c3d1;
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+    }
+
+    .widget-selected {
+      border-color: rgba(57, 169, 53, 0.7);
+      box-shadow: 0 0 0 2px rgba(57, 169, 53, 0.25), 0 6px 12px rgba(0, 0, 0, 0.1);
+    }
+
     .widget-title {
-      font-size: 11px;
-      letter-spacing: 0.08em;
+      font-size: 12px;
+      letter-spacing: 0.02em;
       text-transform: uppercase;
-      opacity: 0.72;
+      color: var(--ebo-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
     }
+
+    .widget-mode {
+      font-size: 11px;
+      color: #8a9aad;
+    }
+
     .widget-value {
       font-size: 22px;
       font-weight: 600;
-      margin-top: 4px;
-      text-shadow: 0 0 8px rgba(0, 245, 199, 0.55);
-      white-space: nowrap;
-    }
-    .widget-mode {
-      position: absolute;
-      right: 8px;
-      top: 6px;
-      font-size: 10px;
-      opacity: 0.55;
+      margin-top: 6px;
+      color: var(--ebo-text);
     }
 
-    /* ---------- Barra (lineal) ---------- */
-
+    /* Simplified visual elements */
     .bar-bg {
       position: absolute;
       left: 10px;
@@ -87,101 +326,69 @@
       bottom: 10px;
       height: 10px;
       border-radius: 999px;
-      background: radial-gradient(circle at top, rgba(255, 255, 255, 0.25), transparent 70%),
-        rgba(255, 255, 255, 0.04);
+      background: #e6ebf1;
+      border: 1px solid #d3d9df;
       overflow: hidden;
-      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.7);
     }
+
     .bar-fill {
       height: 100%;
       border-radius: 999px;
-      background: linear-gradient(90deg, #00f5c7, #3bf57a, #9eff57);
+      background: linear-gradient(90deg, #43b649, #8bdc38);
       width: 50%;
-      box-shadow:
-        0 0 16px rgba(0, 245, 199, 0.9),
-        0 0 28px rgba(59, 245, 122, 0.8);
-      transform-origin: left center;
       transition: width 0.25s ease-out;
     }
-
-    /* ---------- Indicator ON/OFF ---------- */
 
     .widget-indicator {
       width: 18px;
       height: 18px;
-      border-radius: 50%;
-      margin-top: 4px;
-      box-shadow:
-        0 0 14px rgba(0, 0, 0, 0.9),
-        0 0 10px rgba(0, 245, 199, 0.45);
+      border-radius: 4px;
+      margin-top: 6px;
+      border: 1px solid #c7d0d9;
+      background: linear-gradient(#fefefe, #e9f0f5);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
-
-    /* ---------- Gauge circular ---------- */
 
     .gauge-shell {
       position: absolute;
       left: 50%;
-      top: 55%;
+      top: 58%;
       width: 78%;
       height: 78%;
       transform: translate(-50%, -50%);
       border-radius: 50%;
-      background: radial-gradient(circle at 30% 20%, #1b2c38, #050608);
-      box-shadow:
-        0 18px 40px rgba(0, 0, 0, 0.9),
-        0 0 26px rgba(0, 245, 199, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: radial-gradient(circle at 40% 30%, #f4f7fa, #dbe3ed);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 3px 10px rgba(0, 0, 0, 0.05);
+      border: 1px solid #d3d9df;
       overflow: hidden;
     }
-    .gauge-arc {
+
+    .gauge-arc,
+    .gauge-arc-fill {
       position: absolute;
       left: 6%;
       top: 6%;
       right: 6%;
       bottom: 6%;
       border-radius: 50%;
-      border: 7px solid rgba(255, 255, 255, 0.06);
-      box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
-      mask-image: conic-gradient(
-        transparent 225deg,
-        black 225deg,
-        black 495deg,
-        transparent 495deg
-      );
-      -webkit-mask-image: conic-gradient(
-        transparent 225deg,
-        black 225deg,
-        black 495deg,
-        transparent 495deg
-      );
     }
+
+    .gauge-arc {
+      border: 7px solid rgba(255, 255, 255, 0.9);
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.05);
+      mask-image: conic-gradient(transparent 225deg, black 225deg, black 495deg, transparent 495deg);
+      -webkit-mask-image: conic-gradient(transparent 225deg, black 225deg, black 495deg, transparent 495deg);
+    }
+
     .gauge-arc-fill {
-      position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      background: conic-gradient(
-        #00f5c7 0deg,
-        #3bf57a 120deg,
-        #9eff57 240deg,
-        rgba(255, 255, 255, 0.1) 270deg
-      );
+      background: conic-gradient(#43b649 0deg, #9bdc3e 200deg, rgba(0, 0, 0, 0.08) 240deg);
       transform-origin: 50% 50%;
       transform: rotate(-135deg);
-      filter: drop-shadow(0 0 12px rgba(0, 245, 199, 0.9));
-      mask-image: conic-gradient(
-        transparent 225deg,
-        black 225deg,
-        black 495deg,
-        transparent 495deg
-      );
-      -webkit-mask-image: conic-gradient(
-        transparent 225deg,
-        black 225deg,
-        black 495deg,
-        transparent 495deg
-      );
+      mask-image: conic-gradient(transparent 225deg, black 225deg, black 495deg, transparent 495deg);
+      -webkit-mask-image: conic-gradient(transparent 225deg, black 225deg, black 495deg, transparent 495deg);
       transition: transform 0.25s ease-out;
     }
+
     .gauge-center {
       position: absolute;
       left: 50%;
@@ -190,11 +397,10 @@
       height: 16px;
       border-radius: 50%;
       transform: translate(-50%, -50%);
-      background: radial-gradient(circle, #00f5c7, #00443a);
-      box-shadow:
-        0 0 12px rgba(0, 245, 199, 0.9),
-        0 0 30px rgba(59, 245, 122, 0.8);
+      background: linear-gradient(#ffffff, #d6dde6);
+      border: 1px solid #cbd3dc;
     }
+
     .gauge-needle {
       position: absolute;
       left: 50%;
@@ -202,50 +408,49 @@
       width: 2px;
       height: 40%;
       transform-origin: 50% 90%;
-      background: linear-gradient(#fdfdfd, #00f5c7);
-      box-shadow: 0 0 10px rgba(0, 245, 199, 0.9);
+      background: linear-gradient(#43b649, #2f8d2c);
       transform: translate(-50%, -90%) rotate(-135deg);
       transition: transform 0.25s ease-out;
     }
+
     .gauge-label {
       position: absolute;
       left: 50%;
       bottom: 10%;
       transform: translateX(-50%);
       font-size: 11px;
-      opacity: 0.75;
+      color: var(--ebo-muted);
     }
-
-    /* ---------- Ícono de ventilador ---------- */
 
     .fan-wrapper {
       margin-top: 8px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
+
     .fan-icon {
       width: 40px;
       height: 40px;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      background: radial-gradient(circle at 30% 20%, #1f313e, #050608);
+      border-radius: 8px;
+      border: 1px solid #d2d8de;
+      background: linear-gradient(#f7fafc, #e4eaf0);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow:
-        0 10px 24px rgba(0, 0, 0, 0.9),
-        0 0 16px rgba(0, 245, 199, 0.45);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
     }
+
     .fan-rotor {
       position: relative;
       width: 70%;
       height: 70%;
       border-radius: 50%;
-      background: radial-gradient(circle, #ffffff, #00f5c7);
-      box-shadow: 0 0 10px rgba(0, 245, 199, 0.8);
+      background: #43b649;
+      box-shadow: 0 0 8px rgba(67, 182, 73, 0.35);
       overflow: visible;
     }
+
     .fan-blade {
       position: absolute;
       left: 50%;
@@ -254,9 +459,10 @@
       height: 60%;
       transform-origin: 50% 100%;
       border-radius: 999px;
-      background: linear-gradient(#ffffff, #00f5c7);
-      box-shadow: 0 0 8px rgba(0, 245, 199, 0.9);
+      background: linear-gradient(#ffffff, #cbe7c4);
+      border: 1px solid rgba(67, 182, 73, 0.35);
     }
+
     .fan-blade:nth-child(1) { transform: translate(-50%, -100%) rotate(0deg); }
     .fan-blade:nth-child(2) { transform: translate(-50%, -100%) rotate(120deg); }
     .fan-blade:nth-child(3) { transform: translate(-50%, -100%) rotate(240deg); }
@@ -265,21 +471,130 @@
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
+
     .fan-rotor.spin {
       animation: spin-blades 0.8s linear infinite;
     }
+
     .fan-text {
       font-size: 13px;
-      opacity: 0.8;
+      color: var(--ebo-text);
+    }
+
+    /* Inspector */
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 6px 8px;
+      background: #f8fafc;
+      border: 1px solid var(--ebo-border);
+      border-radius: 4px;
+    }
+
+    .info-row strong {
+      color: var(--ebo-text);
+    }
+
+    .inspector-empty {
+      color: var(--ebo-muted);
+      font-size: 13px;
+      padding: 10px 0;
+    }
+
+    /* Status bar */
+    .ebo-statusbar {
+      height: 32px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      background: #fff;
+      border-top: 1px solid var(--ebo-border);
+      color: var(--ebo-muted);
+      font-size: 13px;
+      box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.03);
     }
   </style>
 </head>
 <body>
-  <div id="screen-root">
-    <div id="loading">Cargando pantalla...</div>
-  </div>
+  <header class="ebo-header">
+    <div class="ebo-brand">
+      <div class="ebo-logo">E</div>
+      <div>
+        <div>DX-Ascend Workstation</div>
+        <div style="font-size: 12px; opacity: 0.85; font-weight: 400;">Inspirado en EcoStruxure Building Operation</div>
+      </div>
+    </div>
+    <div class="ebo-connection">
+      <span class="status-led online"></span>
+      <span id="status-text">Conectado</span>
+    </div>
+  </header>
+
+  <nav class="ebo-toolbar">
+    <div class="toolbar-group">
+      <button class="toolbar-btn">Archivo</button>
+      <button class="toolbar-btn">Editar</button>
+      <button class="toolbar-btn">Ver</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="toolbar-btn">Herramientas</button>
+      <button class="toolbar-btn">Modo Operador</button>
+    </div>
+    <div class="toolbar-group" style="border-right: none;">
+      <button class="toolbar-btn">Ayuda</button>
+    </div>
+  </nav>
+
+  <section class="ebo-layout">
+    <aside class="panel ebo-tree">
+      <div class="panel-title">Árbol del sistema</div>
+      <div class="tree-content">
+        <ul id="tree-list" class="tree-list"></ul>
+      </div>
+    </aside>
+
+    <main class="ebo-workspace">
+      <div class="workspace-title">
+        <div>
+          <div class="workspace-label">Graphics Editor</div>
+          <div class="workspace-screen" id="workspace-screen-name">Cargando pantalla…</div>
+        </div>
+        <div class="workspace-actions">
+          <div class="action-pill">Guardar</div>
+          <div class="action-pill">Publicar</div>
+          <div class="action-pill">Vista previa</div>
+        </div>
+      </div>
+      <div class="workspace-canvas">
+        <div id="screen-root" class="runtime-surface">
+          <div id="loading">Cargando pantalla...</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="panel ebo-inspector">
+      <div class="panel-title">Inspector</div>
+      <div id="inspector-body" class="inspector-body">
+        <div class="inspector-empty">Selecciona un widget para ver sus propiedades.</div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="ebo-statusbar">
+    <span>Servidor en línea • Última actualización: <strong id="status-updated">-</strong></span>
+  </footer>
 
   <script>
+    let currentData = null;
+    let selectedWidgetId = null;
+
     // ---- Utilidades de rango / decimales según unidad ----
     function inferRange(widget, binding) {
       let min = widget.config && typeof widget.config.min === "number" ? widget.config.min : null;
@@ -319,23 +634,19 @@
     }
 
     async function main() {
-      // URL esperada: /runtime/1, /runtime/2, etc.
       const match = window.location.pathname.match(/\/runtime\/(\d+)/);
       const screenId = match ? match[1] : null;
-
       const loadingEl = document.getElementById("loading");
 
       if (!screenId) {
-        loadingEl.textContent =
-          "Falta screenId en la URL. Usá por ejemplo /runtime/1";
+        loadingEl.textContent = "Falta screenId en la URL. Usá por ejemplo /runtime/1";
         return;
       }
 
       try {
         const res = await fetch("/api/runtime/screen/" + screenId);
         if (!res.ok) {
-          loadingEl.textContent =
-            "Error al obtener pantalla: HTTP " + res.status;
+          loadingEl.textContent = "Error al obtener pantalla: HTTP " + res.status;
           return;
         }
         const data = await res.json();
@@ -346,30 +657,116 @@
       }
     }
 
+    function setSelectedWidget(id) {
+      selectedWidgetId = id;
+      if (currentData) {
+        renderScreen(currentData);
+      }
+    }
+
+    function buildTree(data) {
+      const list = document.getElementById("tree-list");
+      list.innerHTML = "";
+
+      const screenItem = document.createElement("li");
+      screenItem.className = "tree-item selected";
+      screenItem.innerHTML = `<span class="tree-bullet"></span><strong>${data.screen.name}</strong>`;
+
+      const widgetsUl = document.createElement("ul");
+      widgetsUl.className = "tree-children";
+
+      for (const w of data.widgets) {
+        const li = document.createElement("li");
+        li.className = "tree-item" + (w.id === selectedWidgetId ? " selected" : "");
+        li.innerHTML = `<span class="tree-bullet" style="opacity:0.4;"></span>${w.name} <span style="color: var(--ebo-muted);">(${w.type})</span>`;
+        li.onclick = () => setSelectedWidget(w.id);
+        widgetsUl.appendChild(li);
+      }
+
+      screenItem.appendChild(widgetsUl);
+      list.appendChild(screenItem);
+    }
+
+    function updateInspector(data) {
+      const container = document.getElementById("inspector-body");
+      container.innerHTML = "";
+
+      const screenInfo = document.createElement("div");
+      screenInfo.className = "inspector-grid";
+      screenInfo.innerHTML = `
+        <div class="info-row"><strong>Pantalla</strong><span>${data.screen.name}</span></div>
+        <div class="info-row"><strong>Ruta</strong><span>${data.screen.route || "-"}</span></div>
+        <div class="info-row"><strong>Descripción</strong><span>${data.screen.description || "-"}</span></div>
+        <div class="info-row"><strong>Widgets</strong><span>${data.widgets.length}</span></div>
+      `;
+      container.appendChild(screenInfo);
+
+      const widget = data.widgets.find((w) => w.id === selectedWidgetId);
+      if (!widget) {
+        const empty = document.createElement("div");
+        empty.className = "inspector-empty";
+        empty.textContent = "Selecciona un widget para ver detalles";
+        container.appendChild(empty);
+        return;
+      }
+
+      const bindings = widget.bindings && widget.bindings.length ? widget.bindings[0] : null;
+      const valueStr = bindings && typeof bindings.value === "number"
+        ? bindings.value.toFixed(inferDecimals(widget, bindings))
+        : bindings && bindings.value !== undefined
+        ? bindings.value
+        : "-";
+      const unitStr = bindings && bindings.datapoint && bindings.datapoint.unit ? bindings.datapoint.unit : "";
+
+      const widgetInfo = document.createElement("div");
+      widgetInfo.className = "inspector-grid";
+      widgetInfo.style.marginTop = "12px";
+      widgetInfo.innerHTML = `
+        <div class="info-row"><strong>Widget</strong><span>${widget.name}</span></div>
+        <div class="info-row"><strong>Tipo</strong><span>${widget.type}</span></div>
+        <div class="info-row"><strong>Valor</strong><span>${valueStr} ${unitStr}</span></div>
+        <div class="info-row"><strong>Modo</strong><span>${bindings ? bindings.mode || "" : "-"}</span></div>
+        <div class="info-row"><strong>Datapoint</strong><span>${bindings && bindings.datapoint ? bindings.datapoint.name : "Sin binding"}</span></div>
+      `;
+      container.appendChild(widgetInfo);
+    }
+
+    function updateStatusTimestamp(iso) {
+      const el = document.getElementById("status-updated");
+      if (el && iso) {
+        const dt = new Date(iso);
+        el.textContent = dt.toLocaleString();
+      }
+    }
+
     function renderScreen(data) {
+      currentData = data;
       const root = document.getElementById("screen-root");
       root.innerHTML = "";
 
-      const title = document.createElement("div");
-      title.className = "screen-title";
-      title.textContent =
-        data.screen.name + (data.screen.route ? "  " + data.screen.route : "");
-      root.appendChild(title);
+      const screenNameEl = document.getElementById("workspace-screen-name");
+      screenNameEl.textContent = data.screen.name + (data.screen.route ? "  " + data.screen.route : "");
 
-      const offsetY = 40; // bajamos todo un poco para que el título no tape
+      if (!selectedWidgetId && data.widgets.length) {
+        selectedWidgetId = data.widgets[0].id;
+      }
+
+      const offsetY = 12;
 
       for (const w of data.widgets) {
         const el = document.createElement("div");
-        el.className = "widget";
+        el.className = "widget" + (w.id === selectedWidgetId ? " widget-selected" : "");
 
         el.style.left = (w.x || 0) + "px";
         el.style.top = ((w.y || 0) + offsetY) + "px";
         el.style.width = (w.width || 120) + "px";
         el.style.height = (w.height || 80) + "px";
 
+        el.onclick = () => setSelectedWidget(w.id);
+
         const titleEl = document.createElement("div");
         titleEl.className = "widget-title";
-        titleEl.textContent = w.name + " [" + w.type.toUpperCase() + "]";
+        titleEl.innerHTML = `<span>${w.name}</span><span class="widget-mode">${w.type.toUpperCase()}</span>`;
         el.appendChild(titleEl);
 
         const modeEl = document.createElement("div");
@@ -379,7 +776,7 @@
         if (binding) {
           modeEl.textContent = binding.mode || "";
         } else {
-          modeEl.textContent = "no bind";
+          modeEl.textContent = "Sin binding";
         }
         el.appendChild(modeEl);
 
@@ -388,13 +785,9 @@
 
         if (binding) {
           if (typeof binding.value === "number") {
-            const unit = binding.datapoint && binding.datapoint.unit
-              ? binding.datapoint.unit
-              : "";
+            const unit = binding.datapoint && binding.datapoint.unit ? binding.datapoint.unit : "";
             const decimals = inferDecimals(w, binding);
-            valEl.textContent =
-              binding.value.toFixed(decimals) +
-              (unit ? " " + unit : "");
+            valEl.textContent = binding.value.toFixed(decimals) + (unit ? " " + unit : "");
           } else {
             valEl.textContent = binding.value ? "ON" : "OFF";
           }
@@ -403,8 +796,6 @@
         }
 
         el.appendChild(valEl);
-
-        /* ---------- Tipos ---------- */
 
         // Barra lineal
         if (w.type === "bar" && binding && typeof binding.value === "number") {
@@ -415,11 +806,7 @@
           barFill.className = "bar-fill";
 
           const range = inferRange(w, binding);
-          const pct = Math.max(
-            0,
-            Math.min(1, (binding.value - range.min) / (range.max - range.min || 1))
-          );
-
+          const pct = Math.max(0, Math.min(1, (binding.value - range.min) / (range.max - range.min || 1)));
           barFill.style.width = (pct * 100).toFixed(1) + "%";
 
           barBg.appendChild(barFill);
@@ -432,19 +819,17 @@
           ind.className = "widget-indicator";
           const on = !!binding.value;
           ind.style.background = on
-            ? "radial-gradient(circle, #3bf57a 0%, #029f54 60%, #00361c 100%)"
-            : "radial-gradient(circle, #555 0%, #222 60%, #000 100%)";
+            ? "linear-gradient(#fefefe, #dff3e2)"
+            : "linear-gradient(#fefefe, #e6e6e6)";
+          ind.style.borderColor = on ? "rgba(67, 182, 73, 0.6)" : "#d3d9df";
           el.appendChild(ind);
         }
 
         // Gauge circular
         if (w.type === "gauge" && binding && typeof binding.value === "number") {
           const range = inferRange(w, binding);
-          const pct = Math.max(
-            0,
-            Math.min(1, (binding.value - range.min) / (range.max - range.min || 1))
-          );
-          const angle = -135 + pct * 270; // -135° a +135°
+          const pct = Math.max(0, Math.min(1, (binding.value - range.min) / (range.max - range.min || 1)));
+          const angle = -135 + pct * 270;
 
           const shell = document.createElement("div");
           shell.className = "gauge-shell";
@@ -461,18 +846,13 @@
 
           const needle = document.createElement("div");
           needle.className = "gauge-needle";
-          needle.style.transform =
-            "translate(-50%, -90%) rotate(" + angle + "deg)";
+          needle.style.transform = "translate(-50%, -90%) rotate(" + angle + "deg)";
 
           const label = document.createElement("div");
           label.className = "gauge-label";
-          const unit =
-            binding.datapoint && binding.datapoint.unit
-              ? binding.datapoint.unit
-              : "";
+          const unit = binding.datapoint && binding.datapoint.unit ? binding.datapoint.unit : "";
           const decimals = inferDecimals(w, binding);
-          label.textContent =
-            binding.value.toFixed(decimals) + (unit ? " " + unit : "");
+          label.textContent = binding.value.toFixed(decimals) + (unit ? " " + unit : "");
 
           shell.appendChild(arcFill);
           shell.appendChild(arc);
@@ -517,6 +897,10 @@
 
         root.appendChild(el);
       }
+
+      buildTree(data);
+      updateInspector(data);
+      updateStatusTimestamp(data.generatedAt);
     }
 
     function startAutoRefresh(screenId) {
@@ -529,7 +913,7 @@
         } catch (e) {
           console.warn("Auto-refresh error", e);
         }
-      }, 2000); // refresco cada 2s
+      }, 2000);
     }
 
     main().catch((err) => {

@@ -1,7 +1,25 @@
-import 'screen_designer.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'screen_designer.dart';
+
+const kEboGreen = Color(0xFF6CCB5F);
+const kSlateSurface = Color(0xFF161B22);
+
+BoxDecoration workstationPanelDecoration() {
+  return BoxDecoration(
+    color: const Color(0xFF1C232F),
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: Colors.white.withOpacity(0.05)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.35),
+        blurRadius: 12,
+        offset: const Offset(0, 10),
+      ),
+    ],
+  );
+}
 
 void main() {
   runApp(const DxAscendWorkstationApp());
@@ -14,9 +32,39 @@ class DxAscendWorkstationApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'DX-Ascend Workstation',
-      theme: ThemeData.dark().copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        scaffoldBackgroundColor: const Color(0xFF121212),
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0E1218),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: kEboGreen,
+          brightness: Brightness.dark,
+        ).copyWith(
+          background: const Color(0xFF0E1218),
+          surface: kSlateSurface,
+          primary: kEboGreen,
+          secondary: kEboGreen,
+        ),
+        cardColor: kSlateSurface,
+        inputDecorationTheme: const InputDecorationTheme(
+          filled: true,
+          fillColor: Color(0xFF1F2632),
+          border: OutlineInputBorder(),
+          labelStyle: TextStyle(color: Colors.white70),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF1B232E),
+          elevation: 0,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: kEboGreen,
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
       ),
       home: const HomeTabsPage(),
     );
@@ -28,27 +76,352 @@ class HomeTabsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('DX-Ascend Workstation'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Modbus'),
-              Tab(text: 'Pantallas'),
-              Tab(text: 'Bindings'),
-            ],
-          ),
-        ),
-        body: const TabBarView(
+        body: Column(
           children: [
-            ModbusTab(),
-            ScreensTab(),
-            BindingsTab(),
+            _buildHeader(colorScheme),
+            _buildToolbar(),
+            Expanded(
+              child: Row(
+                children: [
+                  _buildNavigationPane(),
+                  Expanded(
+                    child: Container(
+                      margin: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: kSlateSurface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withOpacity(0.06)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.45),
+                            blurRadius: 18,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E2733),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(14),
+                              ),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.white.withOpacity(0.06),
+                                ),
+                              ),
+                            ),
+                            child: const TabBar(
+                              labelStyle: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                              ),
+                              indicatorColor: kEboGreen,
+                              tabs: [
+                                Tab(text: 'Modbus'),
+                                Tab(text: 'Pantallas'),
+                                Tab(text: 'Bindings'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              child: TabBarView(
+                                children: [
+                                  ModbusTab(),
+                                  ScreensTab(),
+                                  BindingsTab(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _buildStatusBar(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF1C5A3D), Color(0xFF163329)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 18,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.06)),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.monitor, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'DX-Ascend Workstation',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Row(
+              children: [
+                _chromeChip(Icons.layers, 'Workspace'),
+                _chromeChip(Icons.rule_folder, 'Graphics'),
+                _chromeChip(Icons.router, 'Modbus'),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              Icon(Icons.cloud_sync, color: colorScheme.onPrimary),
+              const SizedBox(width: 6),
+              Text(
+                'Sync activo',
+                style: TextStyle(color: colorScheme.onPrimary),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.person, color: Colors.white70, size: 18),
+                    SizedBox(width: 8),
+                    Text('Operador', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121821),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
+        ),
+      ),
+      child: Row(
+        children: [
+          _toolbarButton(Icons.save, 'Guardar'),
+          const SizedBox(width: 6),
+          _toolbarButton(Icons.refresh, 'Refrescar'),
+          const SizedBox(width: 6),
+          _toolbarButton(Icons.analytics, 'Tendencias'),
+          const SizedBox(width: 6),
+          _toolbarButton(Icons.settings, 'Preferencias'),
+          const Spacer(),
+          _toolbarButton(Icons.bug_report, 'Diagnóstico'),
+          const SizedBox(width: 6),
+          _toolbarButton(Icons.help_outline, 'Ayuda'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationPane() {
+    return Container(
+      width: 240,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF11161E),
+        border: Border(
+          right: BorderSide(color: Colors.white.withOpacity(0.06)),
+        ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(4, 0)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'Explorador',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 4),
+                Text('Recorré sistemas y vistas', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Colors.white24),
+          Expanded(
+            child: ListView(
+              children: [
+                _navTile(Icons.widgets, 'Gráficos y Widgets', 'Diseño y runtime'),
+                _navTile(Icons.dns, 'Drivers Modbus', 'Interfaces y devices'),
+                _navTile(Icons.link, 'Bindings', 'Relaciones datapoint'),
+                _navTile(Icons.assessment, 'Alarmas', 'Eventos activos'),
+                _navTile(Icons.settings_input_component, 'I/O', 'Puntos físicos'),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              border: Border(
+                top: BorderSide(color: Colors.white.withOpacity(0.05)),
+              ),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.info_outline, color: Colors.white70, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Estado: conectado al servicio local',
+                    style: TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121821),
+        border: Border(
+          top: BorderSide(color: Colors.white.withOpacity(0.05)),
+        ),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.schedule, size: 18, color: Colors.white70),
+          SizedBox(width: 8),
+          Text('Último guardado hace 2 min', style: TextStyle(color: Colors.white70)),
+          SizedBox(width: 24),
+          Icon(Icons.security, size: 18, color: Colors.white70),
+          SizedBox(width: 8),
+          Text('Sesión segura', style: TextStyle(color: Colors.white70)),
+          Spacer(),
+          Icon(Icons.cloud_done, size: 18, color: Colors.white70),
+          SizedBox(width: 8),
+          Text('Servicio runtime online', style: TextStyle(color: Colors.white70)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chromeChip(IconData icon, String label) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white70),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _toolbarButton(IconData icon, String tooltip) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: () {},
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(tooltip, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navTile(IconData icon, String title, String subtitle) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.white70),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white60)),
+      horizontalTitleGap: 8,
+      dense: true,
+      onTap: () {},
     );
   }
 }
@@ -500,10 +873,7 @@ class _ModbusTabState extends State<ModbusTab> {
         const SizedBox(height: 4),
         Expanded(
           child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _interfaces.isEmpty
                 ? const Center(child: Text('Sin interfaces'))
                 : ListView.builder(
@@ -654,10 +1024,7 @@ class _ModbusTabState extends State<ModbusTab> {
         const SizedBox(height: 4),
         Expanded(
           child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _devices.isEmpty
                 ? const Center(child: Text('Sin devices'))
                 : ListView.builder(
@@ -790,10 +1157,7 @@ class _ModbusTabState extends State<ModbusTab> {
         const SizedBox(height: 4),
         Expanded(
           child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _datapoints.isEmpty
                 ? const Center(child: Text('Sin datapoints'))
                 : ListView.builder(
@@ -1365,10 +1729,7 @@ class _ScreensTabState extends State<ScreensTab> {
         const SizedBox(height: 4),
         Expanded(
           child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _screens.isEmpty
                 ? const Center(child: Text('Sin pantallas'))
                 : ListView.builder(
@@ -1469,10 +1830,7 @@ class _ScreensTabState extends State<ScreensTab> {
               Expanded(
                 flex: 2,
                 child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.teal.withOpacity(0.5)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  decoration: workstationPanelDecoration(),
                   child: _selectedScreenId == null
                       ? const Center(
                           child: Text('Seleccioná una pantalla'),
@@ -1499,10 +1857,7 @@ class _ScreensTabState extends State<ScreensTab> {
               Expanded(
                 flex: 3,
                 child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.teal.withOpacity(0.5)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  decoration: workstationPanelDecoration(),
                   padding: const EdgeInsets.all(8),
                   child: _selectedScreenId == null
                       ? const Center(
@@ -2038,10 +2393,7 @@ class _BindingsTabState extends State<BindingsTab> {
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _widgets.isEmpty
                 ? const Center(child: Text('Sin widgets cargados'))
                 : ListView.builder(
@@ -2138,10 +2490,7 @@ class _BindingsTabState extends State<BindingsTab> {
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _datapoints.isEmpty
                 ? const Center(child: Text('Sin datapoints cargados'))
                 : ListView.builder(
@@ -2182,10 +2531,7 @@ class _BindingsTabState extends State<BindingsTab> {
         const SizedBox(height: 4),
         Expanded(
           child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            decoration: workstationPanelDecoration(),
             child: _selectedScreenId == null
                 ? const Center(child: Text('Seleccioná una pantalla'))
                 : _bindings.isEmpty
