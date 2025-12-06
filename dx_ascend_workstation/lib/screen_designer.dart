@@ -45,6 +45,10 @@ class ScreenDesigner extends StatefulWidget {
   /// Recibe un Map con los mismos campos que el server espera en PUT /api/widgets/:id
   final void Function(Map<String, dynamic> updatedWidget) onWidgetChanged;
 
+  /// Callbacks opcionales para selección.
+  final void Function(int widgetId)? onWidgetSelected;
+  final int? selectedWidgetId;
+
   /// Tamaño lógico del canvas (coincide con lo que usa el runtime web)
   final double canvasWidth;
   final double canvasHeight;
@@ -55,6 +59,8 @@ class ScreenDesigner extends StatefulWidget {
     required this.onWidgetChanged,
     this.canvasWidth = 800,
     this.canvasHeight = 450,
+    this.onWidgetSelected,
+    this.selectedWidgetId,
   }) : super(key: key);
 
   @override
@@ -157,6 +163,8 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
     final width = w.width * scale;
     final height = w.height * scale;
 
+    final isSelected = widget.selectedWidgetId == w.id;
+
     Color borderColor;
     switch (w.type) {
       case 'bar':
@@ -182,6 +190,8 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
       width: width,
       height: height,
       child: GestureDetector(
+        onTap: () => widget.onWidgetSelected?.call(w.id),
+        onPanStart: (_) => widget.onWidgetSelected?.call(w.id),
         onPanUpdate: (details) {
           setState(() {
             w.x += details.delta.dx / scale;
@@ -196,7 +206,10 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: borderColor, width: 1.1),
+                border: Border.all(
+                  color: isSelected ? Colors.amberAccent : borderColor,
+                  width: isSelected ? 2.0 : 1.1,
+                ),
                 gradient: const LinearGradient(
                   colors: [
                     Color(0x22FFFFFF),
