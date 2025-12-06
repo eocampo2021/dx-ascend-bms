@@ -6,6 +6,22 @@ import 'screen_designer.dart';
 const kEboGreen = Color(0xFF6CCB5F);
 const kSlateSurface = Color(0xFF161B22);
 
+class NavigationNode {
+  final String name;
+  final String type;
+  final IconData icon;
+  final List<NavigationNode> children;
+  final String? status;
+
+  const NavigationNode({
+    required this.name,
+    required this.type,
+    required this.icon,
+    this.children = const [],
+    this.status,
+  });
+}
+
 BoxDecoration workstationPanelDecoration() {
   return BoxDecoration(
     color: const Color(0xFF1C232F),
@@ -79,7 +95,7 @@ class HomeTabsPage extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         body: Column(
           children: [
@@ -130,9 +146,10 @@ class HomeTabsPage extends StatelessWidget {
                               ),
                               indicatorColor: kEboGreen,
                               tabs: [
-                                Tab(text: 'Modbus'),
-                                Tab(text: 'Pantallas'),
-                                Tab(text: 'Bindings'),
+                                Tab(text: 'Workstation'),
+                                Tab(text: 'Graphics Editor'),
+                                Tab(text: 'Script Editor'),
+                                Tab(text: 'Modbus I/O'),
                               ],
                             ),
                           ),
@@ -145,9 +162,10 @@ class HomeTabsPage extends StatelessWidget {
                               ),
                               child: TabBarView(
                                 children: [
+                                  WorkstationTab(),
+                                  GraphicsEditorTab(),
+                                  ScriptEditorTab(),
                                   ModbusTab(),
-                                  ScreensTab(),
-                                  BindingsTab(),
                                 ],
                               ),
                             ),
@@ -422,6 +440,1162 @@ class HomeTabsPage extends StatelessWidget {
       horizontalTitleGap: 8,
       dense: true,
       onTap: () {},
+    );
+  }
+}
+
+/* =========================
+ *  WORKSTATION TREE
+ * ========================= */
+
+class WorkstationTab extends StatefulWidget {
+  const WorkstationTab({super.key});
+
+  @override
+  State<WorkstationTab> createState() => _WorkstationTabState();
+}
+
+class _WorkstationTabState extends State<WorkstationTab> {
+  final List<NavigationNode> _nodes = const [
+    NavigationNode(
+      name: 'Proyecto DX-Ascend',
+      type: 'Workspace',
+      icon: Icons.cloud_outlined,
+      children: [
+        NavigationNode(
+          name: 'Pantallas HMI',
+          type: 'Pantalla',
+          icon: Icons.tv,
+          children: [
+            NavigationNode(
+              name: 'Tablero Principal',
+              type: 'Vista gráfica',
+              icon: Icons.dashboard_customize,
+              status: 'Actualizado',
+            ),
+            NavigationNode(
+              name: 'Sala de Motores',
+              type: 'Vista gráfica',
+              icon: Icons.meeting_room,
+              status: 'Con alarmas',
+            ),
+            NavigationNode(
+              name: 'Climatización',
+              type: 'Vista gráfica',
+              icon: Icons.ac_unit,
+              status: 'Published',
+            ),
+          ],
+        ),
+        NavigationNode(
+          name: 'Programas de Control',
+          type: 'Script',
+          icon: Icons.code,
+          children: [
+            NavigationNode(
+              name: 'Reglas HVAC',
+              type: 'Program',
+              icon: Icons.developer_mode,
+              status: 'Running',
+            ),
+            NavigationNode(
+              name: 'Energía y Iluminación',
+              type: 'Program',
+              icon: Icons.lightbulb,
+              status: 'En edición',
+            ),
+            NavigationNode(
+              name: 'Seguridad y CCTV',
+              type: 'Program',
+              icon: Icons.shield_moon,
+              status: 'Publicado',
+            ),
+          ],
+        ),
+        NavigationNode(
+          name: 'Controladores de campo',
+          type: 'Controller',
+          icon: Icons.memory,
+          children: [
+            NavigationNode(
+              name: 'DXC-200 Gateway',
+              type: 'Gateway',
+              icon: Icons.hub,
+              status: 'Conectado',
+            ),
+            NavigationNode(
+              name: 'DXC-48 Planta Baja',
+              type: 'Controller',
+              icon: Icons.router,
+              status: 'Online',
+            ),
+            NavigationNode(
+              name: 'DXC-48 Azotea',
+              type: 'Controller',
+              icon: Icons.router,
+              status: 'Modo prueba',
+            ),
+          ],
+        ),
+        NavigationNode(
+          name: 'Interfaces de comunicación',
+          type: 'ModbusTCP',
+          icon: Icons.device_hub,
+          children: [
+            NavigationNode(
+              name: 'ModbusTCP - UPS',
+              type: 'Interface',
+              icon: Icons.electrical_services,
+              status: 'Polling 1s',
+            ),
+            NavigationNode(
+              name: 'ModbusTCP - Chillers',
+              type: 'Interface',
+              icon: Icons.ac_unit,
+              status: 'Polling 2s',
+            ),
+            NavigationNode(
+              name: 'Red BACnet',
+              type: 'Interface',
+              icon: Icons.settings_input_antenna,
+              status: 'Solo lectura',
+            ),
+          ],
+        ),
+        NavigationNode(
+          name: 'Variables del sistema',
+          type: 'Variables',
+          icon: Icons.storage_rounded,
+          children: [
+            NavigationNode(
+              name: 'Digitales',
+              type: 'Bool',
+              icon: Icons.toggle_on,
+              children: [
+                NavigationNode(
+                  name: 'Falla General',
+                  type: 'Alarm Bool',
+                  icon: Icons.warning_amber_rounded,
+                  status: 'Normal',
+                ),
+                NavigationNode(
+                  name: 'Bomba 1 ON',
+                  type: 'Digital Input',
+                  icon: Icons.opacity,
+                  status: 'Activo',
+                ),
+              ],
+            ),
+            NavigationNode(
+              name: 'Analógicas',
+              type: 'Float',
+              icon: Icons.multiline_chart,
+              children: [
+                NavigationNode(
+                  name: 'Temperatura Sala',
+                  type: 'Analog Input',
+                  icon: Icons.thermostat,
+                  status: '23.4 °C',
+                ),
+                NavigationNode(
+                  name: 'Consumo Total',
+                  type: 'Analog Input',
+                  icon: Icons.bolt,
+                  status: '128.5 kW',
+                ),
+              ],
+            ),
+            NavigationNode(
+              name: 'Carpetas técnicas',
+              type: 'Folder',
+              icon: Icons.folder_special,
+              children: [
+                NavigationNode(
+                  name: 'Documentación',
+                  type: 'Folder',
+                  icon: Icons.folder,
+                  status: 'PDF, DWG',
+                ),
+                NavigationNode(
+                  name: 'Snapshots',
+                  type: 'Folder',
+                  icon: Icons.image,
+                  status: 'Último backup 1h',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ];
+
+  String _filter = '';
+  NavigationNode? _selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  labelText: 'Filtrar árbol de navegación',
+                  hintText: 'Pantallas, drivers, variables...',
+                  filled: true,
+                  fillColor: const Color(0xFF0F1722),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (value) => setState(() {
+                  _filter = value.toLowerCase();
+                }),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.add_box_outlined),
+              label: const Text('Nuevo objeto'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.auto_fix_high),
+              label: const Text('Descubrimiento'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                width: 300,
+                padding: const EdgeInsets.all(12),
+                decoration: workstationPanelDecoration(),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.account_tree, color: Colors.white70),
+                          SizedBox(width: 8),
+                          Text(
+                            'Árbol de navegación',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ..._buildNodeList(_nodes),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: workstationPanelDecoration(),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: kEboGreen),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _selected == null
+                                  ? 'Seleccioná un objeto para ver sus propiedades de runtime y edición.'
+                                  : 'Propiedades para "${_selected!.name}"',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _selected == null ? null : () {},
+                            icon: const Icon(Icons.edit_document),
+                            label: const Text('Editar'),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _selected == null ? null : () {},
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Abrir runtime'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: workstationPanelDecoration(),
+                        child: _selected == null
+                            ? const Center(
+                                child: Text(
+                                  'Sin selección. Navegá por el árbol para ver detalles.',
+                                  style: TextStyle(color: Colors.white60),
+                                ),
+                              )
+                            : _buildDetails(_selected!),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildNodeList(List<NavigationNode> nodes, {int depth = 0}) {
+    return nodes
+        .where((n) => _filter.isEmpty || n.name.toLowerCase().contains(_filter))
+        .map((node) {
+      final hasChildren = node.children.isNotEmpty;
+      final tile = ListTile(
+        leading: Icon(node.icon, color: Colors.white70),
+        dense: true,
+        title: Text(node.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(node.type, style: const TextStyle(color: Colors.white60)),
+        contentPadding: EdgeInsets.only(left: 12.0 + depth * 14),
+        trailing: node.status == null
+            ? null
+            : Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Text(
+                  node.status!,
+                  style: const TextStyle(fontSize: 11, color: kEboGreen),
+                ),
+              ),
+        onTap: () => setState(() => _selected = node),
+      );
+
+      if (!hasChildren) return tile;
+
+      return Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: depth < 1,
+          leading: Icon(node.icon, color: Colors.white70),
+          title: Text(node.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text(node.type, style: const TextStyle(color: Colors.white60)),
+          children: [
+            ..._buildNodeList(node.children, depth: depth + 1),
+          ],
+          onExpansionChanged: (_) => setState(() => _selected = node),
+        ),
+      );
+    }).toList();
+  }
+
+  Widget _buildDetails(NavigationNode node) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(node.icon, color: kEboGreen),
+            const SizedBox(width: 10),
+            Text(
+              node.name,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _detailChip(Icons.badge_outlined, 'Tipo: ${node.type}'),
+            _detailChip(
+              Icons.shield_moon,
+              node.status == null ? 'Sin estado' : 'Estado: ${node.status}',
+            ),
+            _detailChip(Icons.schedule, 'Sincronizado hace 2 min'),
+            _detailChip(Icons.folder, 'Ruta lógica protegida'),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Preview de objeto',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F1722),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Parámetros clave',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                _propertyRow('Etiqueta visible', node.name),
+                _propertyRow('Tipo', node.type),
+                _propertyRow('Estado actual', node.status ?? 'N/D'),
+                _propertyRow('Origen', 'Repositorio local DX-Ascend'),
+                const Spacer(),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.history),
+                      label: const Text('Historial de eventos'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.insert_drive_file),
+                      label: const Text('Exportar'),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _detailChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: kEboGreen),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+
+  Widget _propertyRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 160,
+            child: Text(label, style: const TextStyle(color: Colors.white60)),
+          ),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Text(
+                value,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* =========================
+ *  GRAPHICS EDITOR
+ * ========================= */
+
+class GraphicsEditorTab extends StatefulWidget {
+  const GraphicsEditorTab({super.key});
+
+  @override
+  State<GraphicsEditorTab> createState() => _GraphicsEditorTabState();
+}
+
+class _GraphicsEditorTabState extends State<GraphicsEditorTab> {
+  final List<Map<String, dynamic>> _widgets = [
+    {
+      'id': 1,
+      'name': 'Temperatura',
+      'type': 'gauge',
+      'x': 60,
+      'y': 70,
+      'width': 180,
+      'height': 160,
+      'config_json': {'binding': 'AI_Temp_Sala'},
+    },
+    {
+      'id': 2,
+      'name': 'Demanda HVAC',
+      'type': 'bar',
+      'x': 280,
+      'y': 120,
+      'width': 220,
+      'height': 140,
+      'config_json': {'binding': 'AN_DEMANDA'},
+    },
+    {
+      'id': 3,
+      'name': 'Estado Bomba',
+      'type': 'indicator',
+      'x': 560,
+      'y': 90,
+      'width': 120,
+      'height': 80,
+      'config_json': {'binding': 'DI_BOMBA'},
+    },
+  ];
+
+  int _idCounter = 4;
+  int? _selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 240,
+          child: _buildPalette(),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.stacked_bar_chart, color: kEboGreen),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Graphics Editor',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                  const SizedBox(width: 16),
+                  OutlinedButton.icon(
+                    onPressed: _selectedId == null ? null : _duplicateWidget,
+                    icon: const Icon(Icons.copy_outlined),
+                    label: const Text('Duplicar'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _selectedId == null ? null : _removeWidget,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Eliminar'),
+                  ),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.visibility),
+                    label: const Text('Vista previa runtime'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: workstationPanelDecoration(),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ScreenDesigner(
+                          widgets: _widgets,
+                          selectedWidgetId: _selectedId,
+                          canvasWidth: 960,
+                          canvasHeight: 540,
+                          onWidgetChanged: _updateWidget,
+                          onWidgetSelected: (id) => setState(() => _selectedId = id),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildProperties(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPalette() {
+    final chips = [
+      _paletteChip('Indicador', Icons.toggle_on, 'indicator'),
+      _paletteChip('Gauge', Icons.speed, 'gauge'),
+      _paletteChip('Barras', Icons.bar_chart, 'bar'),
+      _paletteChip('Fan', Icons.ac_unit, 'fan'),
+      _paletteChip('Texto', Icons.text_fields, 'text'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: workstationPanelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Componentes',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips,
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Pantallas',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          ...[
+            _screenTile('Tablero Principal', true),
+            _screenTile('Salas técnicas', false),
+            _screenTile('CCTV & Alarmas', false),
+          ],
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: () {},
+            icon: const Icon(Icons.add_to_photos_outlined),
+            label: const Text('Nueva pantalla'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paletteChip(String label, IconData icon, String type) {
+    return ActionChip(
+      avatar: Icon(icon, size: 18, color: Colors.white70),
+      label: Text(label),
+      backgroundColor: Colors.white.withOpacity(0.06),
+      onPressed: () {
+        final newWidget = {
+          'id': _idCounter++,
+          'name': label,
+          'type': type,
+          'x': 80 + _widgets.length * 12,
+          'y': 80 + _widgets.length * 10,
+          'width': 160,
+          'height': 120,
+          'config_json': {'binding': 'demo_${type}_$_idCounter'},
+        };
+
+        setState(() {
+          _widgets.add(newWidget);
+          _selectedId = newWidget['id'] as int;
+        });
+      },
+    );
+  }
+
+  Widget _screenTile(String name, bool isActive) {
+    return ListTile(
+      dense: true,
+      leading: Icon(Icons.tv, color: isActive ? kEboGreen : Colors.white70),
+      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+      trailing: isActive
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: kEboGreen.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Activo',
+                style: TextStyle(color: kEboGreen, fontSize: 12),
+              ),
+            )
+          : null,
+      onTap: () {},
+    );
+  }
+
+  Widget _buildProperties() {
+    if (_selectedId == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: const Text(
+          'Seleccioná un widget para ver sus propiedades.',
+          style: TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+
+    final widgetData =
+        _widgets.firstWhere((element) => element['id'] == _selectedId);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                widgetData['name'],
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: kEboGreen.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(widgetData['type']),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: () => _nudge('x', -6),
+                icon: const Icon(Icons.keyboard_arrow_left),
+              ),
+              IconButton(
+                onPressed: () => _nudge('x', 6),
+                icon: const Icon(Icons.keyboard_arrow_right),
+              ),
+              IconButton(
+                onPressed: () => _nudge('y', -6),
+                icon: const Icon(Icons.keyboard_arrow_up),
+              ),
+              IconButton(
+                onPressed: () => _nudge('y', 6),
+                icon: const Icon(Icons.keyboard_arrow_down),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              _propertyBadge('Posición',
+                  'X ${widgetData['x']} - Y ${widgetData['y']}'),
+              _propertyBadge('Dimensiones',
+                  '${widgetData['width']} x ${widgetData['height']} px'),
+              _propertyBadge('Binding', widgetData['config_json']['binding'].toString()),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  label: 'Width',
+                  min: 80,
+                  max: 320,
+                  value: (widgetData['width'] as num).toDouble(),
+                  onChanged: (v) => _resize('width', v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Slider(
+                  label: 'Height',
+                  min: 60,
+                  max: 260,
+                  value: (widgetData['height'] as num).toDouble(),
+                  onChanged: (v) => _resize('height', v),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _resize(String field, double value) {
+    if (_selectedId == null) return;
+    setState(() {
+      final widgetMap =
+          _widgets.firstWhere((element) => element['id'] == _selectedId);
+      widgetMap[field] = value;
+      _updateWidget(widgetMap);
+    });
+  }
+
+  void _nudge(String field, double delta) {
+    if (_selectedId == null) return;
+    setState(() {
+      final widgetMap =
+          _widgets.firstWhere((element) => element['id'] == _selectedId);
+      widgetMap[field] = (widgetMap[field] as num).toDouble() + delta;
+      _updateWidget(widgetMap);
+    });
+  }
+
+  void _updateWidget(Map<String, dynamic> updatedWidget) {
+    setState(() {
+      final idx = _widgets.indexWhere((w) => w['id'] == updatedWidget['id']);
+      if (idx != -1) {
+        _widgets[idx] = {...updatedWidget};
+      }
+    });
+  }
+
+  void _duplicateWidget() {
+    if (_selectedId == null) return;
+    final base = _widgets.firstWhere((element) => element['id'] == _selectedId);
+    setState(() {
+      final clone = {
+        ...base,
+        'id': _idCounter++,
+        'name': '${base['name']} copy',
+        'x': (base['x'] as num).toDouble() + 16,
+        'y': (base['y'] as num).toDouble() + 12,
+      };
+      _widgets.add(clone);
+      _selectedId = clone['id'] as int;
+    });
+  }
+
+  void _removeWidget() {
+    if (_selectedId == null) return;
+    setState(() {
+      _widgets.removeWhere((element) => element['id'] == _selectedId);
+      _selectedId = null;
+    });
+  }
+
+  Widget _propertyBadge(String title, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+/* =========================
+ *  SCRIPT EDITOR
+ * ========================= */
+
+class ScriptEditorTab extends StatefulWidget {
+  const ScriptEditorTab({super.key});
+
+  @override
+  State<ScriptEditorTab> createState() => _ScriptEditorTabState();
+}
+
+class _ScriptEditorTabState extends State<ScriptEditorTab> {
+  final List<Map<String, dynamic>> _programs = [
+    {
+      'name': 'HVAC_Main',
+      'type': 'Loop program',
+      'status': 'Running',
+      'content': 'Maintain Temp_Setpoint := 23.5;\nif Temp_Main > 24 then FAN_A := ON;\nelse FAN_A := OFF;\n',
+      'vars': [
+        {'name': 'Temp_Main', 'type': 'Float', 'value': '23.7', 'bind': 'AI_TEMP'},
+        {'name': 'Temp_Setpoint', 'type': 'Float', 'value': '23.5', 'bind': 'CONST'},
+        {'name': 'FAN_A', 'type': 'Bool', 'value': 'false', 'bind': 'DO_FAN'},
+      ],
+    },
+    {
+      'name': 'Lighting',
+      'type': 'Schedule program',
+      'status': 'Idle',
+      'content': 'if Hour >= 19 then Lights := 70;\nif Motion = true then Lights := 100;\n',
+      'vars': [
+        {'name': 'Lights', 'type': 'Int', 'value': '70', 'bind': 'AO_DIMMER'},
+        {'name': 'Motion', 'type': 'Bool', 'value': 'true', 'bind': 'DI_MOTION'},
+      ],
+    },
+    {
+      'name': 'Energy_Report',
+      'type': 'Scripting',
+      'status': 'Published',
+      'content': 'log("Energy peak", Peak_KW);\nif Peak_KW > 120 then Alarm("Alta demanda");\n',
+      'vars': [
+        {'name': 'Peak_KW', 'type': 'Float', 'value': '118.2', 'bind': 'AN_PEAK'},
+      ],
+    },
+  ];
+
+  int _selectedProgram = 0;
+  late final TextEditingController _codeCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _codeCtrl = TextEditingController(text: _programs.first['content'] as String);
+  }
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final program = _programs[_selectedProgram];
+    return Row(
+      children: [
+        SizedBox(
+          width: 240,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: workstationPanelDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Programas',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.separated(
+                    itemBuilder: (_, i) => _programTile(i),
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                    itemCount: _programs.length,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.add_chart),
+                  label: const Text('Nuevo script'),
+                )
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.terminal, color: kEboGreen),
+                  const SizedBox(width: 8),
+                  Text(
+                    program['name'] as String,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  _statusChip(program['status'] as String),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.bug_report),
+                    label: const Text('Debug'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Ejecutar script'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: Container(
+                  decoration: workstationPanelDecoration(),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Editor de Script',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 6),
+                              Expanded(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0C121C),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white12),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: TextField(
+                                      controller: _codeCtrl,
+                                      maxLines: null,
+                                      expands: true,
+                                      style: const TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 14,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        border: InputBorder.none,
+                                      ),
+                                      onChanged: (v) => program['content'] = v,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Container(width: 1, color: Colors.white12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Variables vinculadas',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.02),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white12),
+                                  ),
+                                  child: SingleChildScrollView(
+                                    child: DataTable(
+                                      headingRowColor: MaterialStateProperty.all(
+                                        Colors.white.withOpacity(0.05),
+                                      ),
+                                      columns: const [
+                                        DataColumn(label: Text('Nombre')),
+                                        DataColumn(label: Text('Tipo')),
+                                        DataColumn(label: Text('Valor')),
+                                        DataColumn(label: Text('Binding')),
+                                      ],
+                                      rows: (program['vars'] as List)
+                                          .map((v) => DataRow(cells: [
+                                                DataCell(Text(v['name'].toString())),
+                                                DataCell(Text(v['type'].toString())),
+                                                DataCell(Text(v['value'].toString())),
+                                                DataCell(Text(v['bind'].toString())),
+                                              ]))
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _programTile(int i) {
+    final program = _programs[i];
+    final selected = i == _selectedProgram;
+    return ListTile(
+      dense: true,
+      selected: selected,
+      selectedTileColor: Colors.white.withOpacity(0.06),
+      leading: Icon(Icons.description, color: selected ? kEboGreen : Colors.white70),
+      title: Text(program['name'] as String,
+          style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(program['type'] as String,
+          style: const TextStyle(color: Colors.white60)),
+      trailing: _statusChip(program['status'] as String),
+      onTap: () => _selectProgram(i),
+    );
+  }
+
+  void _selectProgram(int i) {
+    setState(() {
+      _selectedProgram = i;
+      _codeCtrl.text = _programs[i]['content'] as String;
+    });
+  }
+
+  Widget _statusChip(String status) {
+    Color color = kEboGreen;
+    if (status.toLowerCase().contains('idle')) color = Colors.orangeAccent;
+    if (status.toLowerCase().contains('running')) color = kEboGreen;
+    if (status.toLowerCase().contains('published')) color = Colors.lightBlueAccent;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(status, style: TextStyle(color: color, fontSize: 12)),
     );
   }
 }
