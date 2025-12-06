@@ -1,0 +1,86 @@
+-- Meta info
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
+-- Users (para futura gestión de usuarios)
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin'
+);
+
+-- Modbus Interfaces
+CREATE TABLE IF NOT EXISTS modbus_interfaces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  ip_address TEXT NOT NULL,
+  port INTEGER NOT NULL DEFAULT 502,
+  polling_ms INTEGER NOT NULL DEFAULT 1000,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+-- Modbus Devices
+CREATE TABLE IF NOT EXISTS modbus_devices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  interface_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  slave_id INTEGER NOT NULL,
+  timeout_ms INTEGER NOT NULL DEFAULT 1000,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  FOREIGN KEY (interface_id) REFERENCES modbus_interfaces(id) ON DELETE CASCADE
+);
+
+-- Datapoints
+CREATE TABLE IF NOT EXISTS datapoints (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  function TEXT NOT NULL,
+  address INTEGER NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  datatype TEXT NOT NULL,
+  scale REAL NOT NULL DEFAULT 1.0,
+  offset REAL NOT NULL DEFAULT 0.0,
+  unit TEXT,
+  rw TEXT NOT NULL DEFAULT 'R',
+  polling_ms INTEGER,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  FOREIGN KEY (device_id) REFERENCES modbus_devices(id) ON DELETE CASCADE
+);
+
+-- Screens
+CREATE TABLE IF NOT EXISTS screens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  route TEXT NOT NULL UNIQUE,
+  description TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+-- Widgets
+CREATE TABLE IF NOT EXISTS widgets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  screen_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  x INTEGER NOT NULL DEFAULT 0,
+  y INTEGER NOT NULL DEFAULT 0,
+  width INTEGER NOT NULL DEFAULT 100,
+  height INTEGER NOT NULL DEFAULT 100,
+  config_json TEXT NOT NULL DEFAULT '{}',
+  FOREIGN KEY (screen_id) REFERENCES screens(id) ON DELETE CASCADE
+);
+
+-- Bindings
+CREATE TABLE IF NOT EXISTS bindings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  widget_id INTEGER NOT NULL,
+  datapoint_id INTEGER NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'read',
+  expression TEXT,
+  FOREIGN KEY (widget_id) REFERENCES widgets(id) ON DELETE CASCADE,
+  FOREIGN KEY (datapoint_id) REFERENCES datapoints(id) ON DELETE CASCADE
+);
