@@ -13,6 +13,30 @@ const serializeProperties = (properties: unknown) => {
     return properties;
 };
 
+const normalizeRouteFromName = (name: string): string => {
+    const base = name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'screen';
+    return `/${base}`;
+};
+
+const ensurePropertiesObject = (properties: unknown): Record<string, any> => {
+    if (properties === undefined || properties === null) return {};
+    if (typeof properties === 'object') return { ...(properties as Record<string, any>) };
+    if (typeof properties === 'string') {
+        try {
+            const parsed = JSON.parse(properties);
+            if (parsed && typeof parsed === 'object') return { ...parsed };
+        } catch {
+            // ignore
+        }
+    }
+    return {};
+};
+
 // Obtener todo el árbol (Flat list que el frontend convertirá en árbol)
 router.get('/', (req: Request, res: Response) => {
     const db = getDb();
@@ -61,14 +85,67 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
     const db = getDb();
     const { parent_id, name, type, description, properties } = req.body;
+
+    const lowerType = (type || '').toString().toLowerCase();
+
     try {
+        if (lowerType === 'graphic') {
+            const tx = db.transaction(() => {
+                const baseRoute = normalizeRouteFromName(name || '');
+                let routeCandidate = baseRoute;
+                let suffix = 1;
+
+                while (
+                    db.prepare('SELECT id FROM screens WHERE route = ?').get(routeCandidate)
+                ) {
+                    suffix += 1;
+                    routeCandidate = `${baseRoute}-${suffix}`;
+                }
+
+                const screenInfo = db
+                    .prepare(
+                        `INSERT INTO screens (name, route, description, enabled)
+                         VALUES (?, ?, ?, 1)`
+                    )
+                    .run(name, routeCandidate, description || null);
+
+                const screenId = Number(screenInfo.lastInsertRowid);
+                const mergedProps = {
+                    ...ensurePropertiesObject(properties),
+                    screenId,
+                    route: routeCandidate,
+                };
+
+                const objectInfo = db
+                    .prepare(`
+                        INSERT INTO system_objects (parent_id, name, type, description, properties)
+                        VALUES (?, ?, ?, ?, ?)
+                    `)
+                    .run(parent_id, name, type, description || '', JSON.stringify(mergedProps));
+
+                return { objectId: objectInfo.lastInsertRowid, mergedProps, screenId, routeCandidate };
+            });
+
+            const result = tx();
+            return res
+                .status(201)
+                .json({
+                    id: result.objectId,
+                    parent_id,
+                    name,
+                    type,
+                    description,
+                    properties: result.mergedProps,
+                });
+        }
+
         const stmt = db.prepare(`
             INSERT INTO system_objects (parent_id, name, type, description, properties)
             VALUES (?, ?, ?, ?, ?)
         `);
         const serializedProperties = serializeProperties(properties);
         const info = stmt.run(parent_id, name, type, description || '', serializedProperties);
-        res.json({ id: info.lastInsertRowid, ...req.body });
+        res.status(201).json({ id: info.lastInsertRowid, ...req.body });
     } catch (error) {
         res.status(500).json({ error: 'Error creating object' });
     }
