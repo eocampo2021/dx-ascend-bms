@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'models/graphic_widget.dart';
+import 'models/screen.dart';
 import 'models/system_object.dart';
 
 // Configuración de conexión al Backend existente
@@ -358,12 +360,13 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildEditorContent(SystemObject obj) {
-    if (obj.type == 'Script') {
+    final type = obj.type.toLowerCase();
+    if (type == 'script' || type == 'program') {
       return const ScriptEditorView();
-    } else if (obj.type == 'Graphic') {
-      return const GraphicsEditorView();
+    } else if (type == 'graphic' || type == 'screen') {
+      return GraphicsEditorView(systemObject: obj);
     }
-    return Center(child: Text("Generic Editor for ${obj.type}"));
+    return Center(child: Text("Generic Editor for ${obj.name}"));
   }
 
   Widget _buildPropertyGrid(SystemObject obj) {
@@ -403,15 +406,17 @@ class _MainShellState extends State<MainShell> {
   }
 
   Icon _getIconForType(String type, {double size = 16}) {
-    switch (type) {
-      case 'Server':
+    switch (type.toLowerCase()) {
+      case 'server':
         return Icon(Icons.dns, color: Colors.blueAccent, size: size);
-      case 'Folder':
+      case 'folder':
         return Icon(Icons.folder,
             color: const Color(0xFFEBC85E), size: size); // Amarillo carpeta
-      case 'Script':
+      case 'script':
+      case 'program':
         return Icon(Icons.description, color: Colors.green, size: size);
-      case 'Graphic':
+      case 'graphic':
+      case 'screen':
         return Icon(Icons.image, color: Colors.purple, size: size);
       default:
         return Icon(Icons.insert_drive_file, size: size);
@@ -573,71 +578,494 @@ class ScriptEditorView extends StatelessWidget {
 }
 
 // Editor de Gráficos (Estilo EBO)
-class GraphicsEditorView extends StatelessWidget {
-  const GraphicsEditorView({super.key});
+class GraphicsEditorView extends StatefulWidget {
+  final SystemObject systemObject;
+  const GraphicsEditorView({super.key, required this.systemObject});
+
+  @override
+  State<GraphicsEditorView> createState() => _GraphicsEditorViewState();
+}
+
+class _GraphicsEditorViewState extends State<GraphicsEditorView> {
+  List<Screen> _screens = [];
+  List<GraphicWidget> _widgets = [];
+  Screen? _selectedScreen;
+  GraphicWidget? _selectedWidget;
+  bool _loadingScreens = true;
+  bool _loadingWidgets = false;
+  String? _error;
+
+  final _nameCtrl = TextEditingController();
+  final _typeCtrl = TextEditingController();
+  final _xCtrl = TextEditingController();
+  final _yCtrl = TextEditingController();
+  final _widthCtrl = TextEditingController();
+  final _heightCtrl = TextEditingController();
+  final _configCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadScreens();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _typeCtrl.dispose();
+    _xCtrl.dispose();
+    _yCtrl.dispose();
+    _widthCtrl.dispose();
+    _heightCtrl.dispose();
+    _configCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadScreens() async {
+    setState(() {
+      _loadingScreens = true;
+      _error = null;
+    });
+    try {
+      final response = await http.get(Uri.parse('$apiBaseUrl/screens'));
+      if (response.statusCode != 200) {
+        throw Exception('Error al cargar pantallas (${response.statusCode})');
+      }
+      final List<dynamic> data = jsonDecode(response.body);
+      final screens = data.map((e) => Screen.fromJson(e)).toList();
+
+      Screen? initial;
+      final targetId = widget.systemObject.screenId;
+      final targetRoute = widget.systemObject.screenRoute;
+      if (screens.isNotEmpty) {
+        if (targetId != null) {
+          try {
+            initial = screens.firstWhere((s) => s.id == targetId);
+          } catch (_) {
+            initial = null;
+          }
+        }
+
+        if (initial == null && targetRoute != null) {
+          try {
+            initial = screens.firstWhere((s) => s.route == targetRoute);
+          } catch (_) {
+            initial = null;
+          }
+        }
+
+        initial ??= screens.first;
+      }
+
+      setState(() {
+        _screens = screens;
+        _selectedScreen = initial;
+        _loadingScreens = false;
+      });
+
+      if (initial != null) {
+        await _loadWidgets(initial.id);
+      }
+    } catch (e) {
+      setState(() {
+        _loadingScreens = false;
+        _error = 'No se pudieron cargar las pantallas: $e';
+      });
+    }
+  }
+
+  Future<void> _loadWidgets(int screenId) async {
+    setState(() {
+      _loadingWidgets = true;
+      _error = null;
+    });
+    try {
+      final response =
+          await http.get(Uri.parse('$apiBaseUrl/screens/$screenId/widgets'));
+      if (response.statusCode != 200) {
+        throw Exception('Error al cargar widgets (${response.statusCode})');
+      }
+      final List<dynamic> data = jsonDecode(response.body);
+      final widgets = data.map((e) => GraphicWidget.fromJson(e)).toList();
+
+      setState(() {
+        _widgets = widgets;
+        _selectedWidget = widgets.isEmpty ? null : widgets.first;
+      });
+      if (widgets.isNotEmpty) {
+        _fillForm(widgets.first);
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'No se pudieron cargar los widgets: $e';
+      });
+    } finally {
+      setState(() {
+        _loadingWidgets = false;
+      });
+    }
+  }
+
+  Future<void> _createWidget() async {
+    if (_selectedScreen == null) return;
+    final screenId = _selectedScreen!.id;
+    final payload = {
+      'type': 'Panel',
+      'name': 'Nuevo Widget',
+      'x': 40,
+      'y': 40,
+      'width': 160,
+      'height': 80,
+      'config_json': {'note': 'Edita las propiedades y guarda'},
+    };
+
+    final response = await http.post(
+      Uri.parse('$apiBaseUrl/screens/$screenId/widgets'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 201) {
+      await _loadWidgets(screenId);
+    } else {
+      setState(() {
+        _error = 'No se pudo crear el widget (${response.statusCode})';
+      });
+    }
+  }
+
+  Future<void> _saveWidget() async {
+    final widget = _selectedWidget;
+    final screen = _selectedScreen;
+    if (widget == null || screen == null) return;
+
+    final parsedConfig = _safeParseConfig(_configCtrl.text, widget.config);
+
+    final payload = {
+      'id': widget.id,
+      'screen_id': screen.id,
+      'type': _typeCtrl.text.trim().isEmpty ? widget.type : _typeCtrl.text,
+      'name': _nameCtrl.text.trim().isEmpty ? widget.name : _nameCtrl.text,
+      'x': int.tryParse(_xCtrl.text) ?? widget.x,
+      'y': int.tryParse(_yCtrl.text) ?? widget.y,
+      'width': int.tryParse(_widthCtrl.text) ?? widget.width,
+      'height': int.tryParse(_heightCtrl.text) ?? widget.height,
+      'config_json': parsedConfig,
+    };
+
+    final response = await http.put(
+      Uri.parse('$apiBaseUrl/widgets/${widget.id}'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      await _loadWidgets(screen.id);
+    } else {
+      setState(() {
+        _error = 'Error guardando el widget (${response.statusCode})';
+      });
+    }
+  }
+
+  Future<void> _deleteWidget() async {
+    final widget = _selectedWidget;
+    final screen = _selectedScreen;
+    if (widget == null || screen == null) return;
+
+    final response =
+        await http.delete(Uri.parse('$apiBaseUrl/widgets/${widget.id}'));
+    if (response.statusCode == 204) {
+      await _loadWidgets(screen.id);
+    } else {
+      setState(() {
+        _error = 'No se pudo eliminar el widget (${response.statusCode})';
+      });
+    }
+  }
+
+  void _fillForm(GraphicWidget widget) {
+    _nameCtrl.text = widget.name;
+    _typeCtrl.text = widget.type;
+    _xCtrl.text = widget.x.toString();
+    _yCtrl.text = widget.y.toString();
+    _widthCtrl.text = widget.width.toString();
+    _heightCtrl.text = widget.height.toString();
+    _configCtrl.text = const JsonEncoder.withIndent('  ').convert(widget.config);
+  }
+
+  Map<String, dynamic> _safeParseConfig(
+      String value, Map<String, dynamic> fallback) {
+    if (value.trim().isEmpty) return fallback;
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {
+      setState(() {
+        _error = 'El JSON de config no es válido. Se mantendrá el valor previo.';
+      });
+    }
+    return fallback;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Fondo de cuadrícula
         Container(
-          color: const Color(0xFFEEEEEE),
-          child: GridPaper(
-            color: Colors.grey.withOpacity(0.3),
-            interval: 20,
-            divisions: 1,
-            subdivisions: 1,
-            child: Container(),
+          padding: const EdgeInsets.all(8),
+          color: Colors.white,
+          child: Row(
+            children: [
+              const Text('Pantalla publicada:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              DropdownButton<Screen>(
+                value: _selectedScreen,
+                hint: const Text('Selecciona una pantalla'),
+                items: _screens
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text('${s.name} (${s.route})'),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedScreen = value;
+                  });
+                  if (value != null) {
+                    _loadWidgets(value.id);
+                  }
+                },
+              ),
+              const SizedBox(width: 16),
+              ElevatedButton.icon(
+                onPressed: _loadingScreens ? null : _loadScreens,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Recargar'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed:
+                    _selectedScreen == null || _loadingWidgets ? null : _createWidget,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Agregar widget'),
+              ),
+              const Spacer(),
+              if (_selectedScreen != null)
+                Text('Ruta: ${_selectedScreen!.route}',
+                    style: const TextStyle(color: Colors.grey)),
+            ],
           ),
         ),
-        // Elementos simulados
-        Positioned(
-          left: 50,
-          top: 50,
-          child: Container(
-            width: 100,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.black),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
-            ),
-            child: Column(
-              children: [
-                Container(
-                    color: Colors.blue,
-                    height: 20,
-                    width: double.infinity,
-                    child: const Center(
-                        child: Text("AHU-1",
-                            style:
-                                TextStyle(color: Colors.white, fontSize: 10)))),
-                const Expanded(
-                    child: Center(
-                        child: Icon(Icons.ac_unit,
-                            size: 30, color: Colors.blueGrey))),
-              ],
-            ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(_error!, style: const TextStyle(color: Colors.red)),
           ),
-        ),
-        Positioned(
-          left: 200,
-          top: 150,
-          child: Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.black),
-            ),
-            child: const Center(
-                child: Text("23.5°C",
-                    style: TextStyle(fontWeight: FontWeight.bold))),
+        Expanded(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 260,
+                child: Card(
+                  margin: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text('Widgets (${_widgets.length})',
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: _loadingWidgets
+                            ? const Center(child: CircularProgressIndicator())
+                            : ListView.builder(
+                                itemCount: _widgets.length,
+                                itemBuilder: (context, index) {
+                                  final widget = _widgets[index];
+                                  final isSelected = widget.id == _selectedWidget?.id;
+                                  return ListTile(
+                                    selected: isSelected,
+                                    selectedColor: Colors.green,
+                                    selectedTileColor:
+                                        Colors.green.withOpacity(0.1),
+                                    title: Text(widget.name),
+                                    subtitle: Text(
+                                        '${widget.type} • (${widget.x},${widget.y})'),
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedWidget = widget;
+                                      });
+                                      _fillForm(widget);
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEEEEE),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Stack(
+                            children: [
+                              GridPaper(
+                                color: Colors.grey.withOpacity(0.3),
+                                interval: 20,
+                                divisions: 1,
+                                subdivisions: 1,
+                                child: Container(),
+                              ),
+                              ..._widgets.map(_buildWidgetShape),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    _buildWidgetEditor()
+                  ],
+                ),
+              )
+            ],
           ),
-        ),
+        )
       ],
+    );
+  }
+
+  Widget _buildWidgetShape(GraphicWidget widget) {
+    return Positioned(
+      left: widget.x.toDouble(),
+      top: widget.y.toDouble(),
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _selectedWidget = widget);
+          _fillForm(widget);
+        },
+        child: Container(
+          width: widget.width.toDouble(),
+          height: widget.height.toDouble(),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(
+              color:
+                  _selectedWidget?.id == widget.id ? Colors.green : Colors.black,
+            ),
+            boxShadow: const [
+              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(1, 1)),
+            ],
+          ),
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(widget.type, style: const TextStyle(fontSize: 10)),
+              const Spacer(),
+              if (widget.config.isNotEmpty)
+                Text(widget.config.toString(),
+                    style: const TextStyle(fontSize: 9, color: Colors.grey)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWidgetEditor() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE0E0E0))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Propiedades del widget',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _field('Name', _nameCtrl, width: 200),
+              _field('Type', _typeCtrl, width: 140),
+              _field('X', _xCtrl, width: 80, keyboard: TextInputType.number),
+              _field('Y', _yCtrl, width: 80, keyboard: TextInputType.number),
+              _field('Width', _widthCtrl, width: 80,
+                  keyboard: TextInputType.number),
+              _field('Height', _heightCtrl, width: 80,
+                  keyboard: TextInputType.number),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text('Config JSON'),
+          SizedBox(
+            height: 120,
+            child: TextField(
+              controller: _configCtrl,
+              maxLines: null,
+              expands: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '{"label": "Temp", "value": "23°C"}',
+              ),
+              style: const TextStyle(fontFamily: 'Courier New', fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _selectedWidget == null ? null : _saveWidget,
+                icon: const Icon(Icons.save, size: 16),
+                label: const Text('Guardar cambios'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _selectedWidget == null ? null : _deleteWidget,
+                icon: const Icon(Icons.delete, size: 16),
+                label: const Text('Eliminar'),
+              ),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController controller,
+      {double width = 120, TextInputType keyboard = TextInputType.text}) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboard,
+        decoration: InputDecoration(
+          isDense: true,
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+        style: const TextStyle(fontSize: 12),
+      ),
     );
   }
 }
