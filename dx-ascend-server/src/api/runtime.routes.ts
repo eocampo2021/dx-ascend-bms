@@ -156,7 +156,7 @@ function buildRuntimeForScreenId(screenId: number) {
 // ---------- Endpoints ----------
 
 // Listado simple de pantallas disponibles para runtime
-router.get("/runtime/screens", (req: Request, res: Response) => {
+router.get("/screens", (req: Request, res: Response) => {
   const db = getDb();
   const rows = db
     .prepare(
@@ -167,7 +167,7 @@ router.get("/runtime/screens", (req: Request, res: Response) => {
 });
 
 // Runtime por ID de pantalla
-router.get("/runtime/screen/:id", (req: Request, res: Response) => {
+router.get("/screen/:id", (req: Request, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     return res.status(400).json({ error: "screen id inválido" });
@@ -182,7 +182,7 @@ router.get("/runtime/screen/:id", (req: Request, res: Response) => {
 });
 
 // Runtime por route (ej: ?route=/sala-principal o ?route=sala-principal)
-router.get("/runtime/screen-by-route", (req: Request, res: Response) => {
+router.get("/screen-by-route", (req: Request, res: Response) => {
   const routeRaw = (req.query.route as string | undefined)?.trim();
   if (!routeRaw) {
     return res.status(400).json({ error: "falta parámetro route" });
