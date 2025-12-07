@@ -468,13 +468,19 @@ class _MainShellState extends State<MainShell> {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
+        final Map<String, dynamic> data = decoded is Map<String, dynamic>
+            ? {...decoded}
+            : <String, dynamic>{};
+
+        data['parent_id'] ??= parent.id;
+        data['name'] ??= payload['name'];
+        data['type'] ??= payload['type'];
+        data['properties'] ??= payload['properties'];
+
         final created = SystemObject.fromJson({
           'id': data['id'] ?? DateTime.now().millisecondsSinceEpoch,
-          'parent_id': parent.id,
-          'name': data['name'] ?? payload['name'],
-          'type': data['type'] ?? payload['type'],
-          'properties': data['properties'] ?? payload['properties'],
+          ...data,
         });
 
         setState(() {
