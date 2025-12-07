@@ -19,7 +19,39 @@ router.get('/', (req: Request, res: Response) => {
     try {
         const stmt = db.prepare('SELECT * FROM system_objects ORDER BY type DESC, name ASC');
         const objects = stmt.all();
-        res.json(objects);
+
+        const screens = db
+            .prepare('SELECT id, name, route, description FROM screens WHERE enabled = 1 ORDER BY id')
+            .all();
+
+        const graphicsFolder = objects.find(
+            (obj: any) => (obj.type || '').toLowerCase() === 'graphics' || (obj.name || '').toLowerCase().includes('graphic')
+        );
+        const parentId = graphicsFolder?.id ?? objects.find((o: any) => o.parent_id === null)?.id ?? null;
+
+        const existingScreenIds = new Set<number>();
+        for (const obj of objects) {
+            try {
+                const parsed = JSON.parse(obj.properties ?? '{}');
+                const sid = parsed.screenId || parsed.screen_id;
+                if (typeof sid === 'number') existingScreenIds.add(sid);
+            } catch {
+                // ignore
+            }
+        }
+
+        const virtualScreens = screens
+            .filter((scr: any) => !existingScreenIds.has(scr.id))
+            .map((scr: any) => ({
+                id: 100000 + scr.id,
+                parent_id: parentId,
+                name: scr.name,
+                type: 'Graphic',
+                description: scr.description ?? '',
+                properties: JSON.stringify({ screenId: scr.id, route: scr.route }),
+            }));
+
+        res.json([...objects, ...virtualScreens]);
     } catch (error) {
         res.status(500).json({ error: 'Error fetching system tree' });
     }

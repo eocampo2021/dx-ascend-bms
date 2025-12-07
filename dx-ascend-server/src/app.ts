@@ -17,8 +17,8 @@ app.use('/api/runtime', runtimeRoutes);
 app.use('/api/system-objects', systemObjectsRoutes); // Registrar ruta del arbol
 app.use('/api', screensRoutes);
 
-// Renderizador web simple: /runtime/1, /runtime/2, etc.
-app.get(['/runtime/:id', '/runtime'], (_req, res) => {
+// Renderizador web simple: /runtime/1, /runtime/2 o /web/Pantalla
+app.get(['/runtime/:id', '/runtime', '/web/:screen', '/web/:screen/*', '/web'], (_req, res) => {
   res.sendFile(path.join(__dirname, '../public/runtime.html'));
 });
 

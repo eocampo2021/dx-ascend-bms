@@ -944,24 +944,15 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       final targetRoute = widget.systemObject.screenRoute;
 
       if (targetId != null) {
-        final response =
-            await http.get(Uri.parse('$apiBaseUrl/screens/$targetId'));
-        if (response.statusCode != 200) {
-          throw Exception(
-              'Error al cargar la pantalla (${response.statusCode})');
-        }
-        initial = Screen.fromJson(jsonDecode(response.body));
-      } else if (targetRoute != null) {
-        final response =
-            await http.get(Uri.parse('$apiBaseUrl/screens?route=$targetRoute'));
-        if (response.statusCode != 200) {
-          throw Exception(
-              'Error al cargar la pantalla (${response.statusCode})');
-        }
-        final data = jsonDecode(response.body);
-        if (data is List && data.isNotEmpty) {
-          initial = Screen.fromJson(data.first);
-        }
+        initial = await _fetchScreenById(targetId);
+      }
+
+      if (initial == null && targetRoute != null) {
+        initial = await _fetchScreenByRoute(targetRoute);
+      }
+
+      if (initial == null) {
+        initial = await _fetchScreenByName(widget.systemObject.name);
       }
 
       setState(() {
@@ -972,6 +963,10 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
 
       if (initial != null) {
         await _loadWidgets(initial.id, allowMock: true);
+      } else {
+        setState(() {
+          _error = 'No se encontró ninguna pantalla asociada a este objeto.';
+        });
       }
     } catch (e) {
       final mockScreens = _buildMockScreens();
@@ -987,6 +982,39 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         await _loadWidgets(_selectedScreen!.id, allowMock: true);
       }
     }
+  }
+
+  Future<Screen?> _fetchScreenById(int id) async {
+    final response = await http.get(Uri.parse('$apiBaseUrl/screens/$id'));
+    if (response.statusCode == 200) {
+      return Screen.fromJson(jsonDecode(response.body));
+    }
+    return null;
+  }
+
+  Future<Screen?> _fetchScreenByRoute(String route) async {
+    final response =
+        await http.get(Uri.parse('$apiBaseUrl/screens?route=$route'));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data is List && data.isNotEmpty) {
+        return Screen.fromJson(data.first);
+      }
+    }
+    return null;
+  }
+
+  Future<Screen?> _fetchScreenByName(String name) async {
+    if (name.trim().isEmpty) return null;
+    final response =
+        await http.get(Uri.parse('$apiBaseUrl/screens?name=$name'));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data is List && data.isNotEmpty) {
+        return Screen.fromJson(data.first);
+      }
+    }
+    return null;
   }
 
   Future<void> _loadWidgets(int screenId, {bool allowMock = false}) async {
@@ -1111,11 +1139,13 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
 
   List<Screen> _buildMockScreens() {
     final mockId = widget.systemObject.screenId ?? 999;
+    final mockRoute =
+        '/web/${widget.systemObject.name.replaceAll(' ', '').toLowerCase()}';
     return [
       Screen(
         id: mockId,
         name: widget.systemObject.name,
-        route: widget.systemObject.screenRoute ?? '/demo/${widget.systemObject.id}',
+        route: widget.systemObject.screenRoute ?? mockRoute,
         description: 'Vista de ejemplo cuando no hay backend',
         enabled: true,
       ),

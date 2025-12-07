@@ -189,19 +189,7 @@ router.get("/screen-by-route", (req: Request, res: Response) => {
   }
 
   const db = getDb();
-  let screen = db
-    .prepare(
-      "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
-    )
-    .get(routeRaw);
-
-  if (!screen && !routeRaw.startsWith("/")) {
-    screen = db
-      .prepare(
-        "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
-      )
-      .get("/" + routeRaw);
-  }
+  const screen = findScreenByRouteOrName(db, routeRaw);
 
   if (!screen) {
     return res.status(404).json({ error: "pantalla no encontrada para ese route" });
@@ -214,5 +202,41 @@ router.get("/screen-by-route", (req: Request, res: Response) => {
 
   res.json(runtime);
 });
+
+function findScreenByRouteOrName(db: any, routeRaw: string) {
+  const normalized = (routeRaw ?? "").trim();
+  if (!normalized) return null;
+
+  const candidates = new Set<string>();
+  candidates.add(normalized);
+
+  const withoutSlashes = normalized.replace(/^\/+/, "");
+  candidates.add(withoutSlashes);
+
+  if (!normalized.startsWith("/")) {
+    candidates.add("/" + normalized);
+  }
+
+  if (!normalized.toLowerCase().startsWith("/web/")) {
+    candidates.add("/web/" + withoutSlashes);
+  }
+
+  for (const cand of candidates) {
+    const screen = db
+      .prepare(
+        "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
+      )
+      .get(cand);
+    if (screen) return screen;
+  }
+
+  // como último recurso, buscar por nombre exacto
+  const byName = db
+    .prepare(
+      "SELECT id, name, route, description FROM screens WHERE lower(name) = lower(?) AND enabled = 1"
+    )
+    .get(normalized);
+  return byName ?? null;
+}
 
 export default router;
