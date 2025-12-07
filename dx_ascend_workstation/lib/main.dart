@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'models/system_object.dart';
 
 // Configuración de conexión al Backend existente
-const String apiBaseUrl = 'http://localhost:3000/api';
+const String apiBaseUrl = 'http://localhost:4000/api';
 
 void main() {
   runApp(const EboWorkstationApp());
@@ -36,35 +37,6 @@ class EboWorkstationApp extends StatelessWidget {
         ),
       ),
       home: const MainShell(),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// MODELOS DE DATOS (Coinciden con tu Schema.sql)
-// ---------------------------------------------------------------------------
-class SystemObject {
-  final int id;
-  final String name;
-  final String type; // 'Folder', 'Server', 'Script', 'Graphic'
-  final int? parentId;
-  List<SystemObject> children = [];
-  bool isExpanded = false;
-
-  SystemObject({
-    required this.id,
-    required this.name,
-    required this.type,
-    this.parentId,
-  });
-
-  factory SystemObject.fromJson(Map<String, dynamic> json) {
-    return SystemObject(
-      id: json['id'],
-      name: json['name'],
-      type: json['type'] ?? 'Unknown',
-      parentId: json[
-          'ParentId'], // Nota: Revisa si tu JSON usa PascalCase o camelCase
     );
   }
 }
