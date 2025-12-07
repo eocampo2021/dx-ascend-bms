@@ -418,6 +418,10 @@ class _MainShellState extends State<MainShell> {
         value: 'rename',
         child: const Text('Renombrar objeto'),
       ),
+      PopupMenuItem(
+        value: 'delete',
+        child: const Text('Eliminar objeto'),
+      ),
       if (actions.isNotEmpty) const PopupMenuDivider(),
       ...actions
           .map(
@@ -438,6 +442,8 @@ class _MainShellState extends State<MainShell> {
 
     if (selected == 'rename') {
       _promptRename(node);
+    } else if (selected == 'delete') {
+      await _confirmDeleteSystemObject(node);
     } else if (selected is _CreateAction) {
       await _createSystemObject(node, selected);
     }
@@ -545,6 +551,32 @@ class _MainShellState extends State<MainShell> {
     await _renameSystemObject(obj, newName.trim());
   }
 
+  Future<void> _confirmDeleteSystemObject(SystemObject obj) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar objeto'),
+        content: Text(
+            '¿Deseas eliminar "${obj.name}" y todos sus elementos contenidos?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.delete),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _deleteSystemObject(obj);
+    }
+  }
+
   Future<String?> _promptForName({
     required String title,
     required String initialValue,
@@ -602,6 +634,71 @@ class _MainShellState extends State<MainShell> {
         _updateObjectNameInTree(obj.id, newName);
       });
     }
+  }
+
+  Future<void> _deleteSystemObject(SystemObject obj) async {
+    String message = 'Objeto eliminado correctamente.';
+    bool removedFromTree = false;
+
+    try {
+      final response =
+          await http.delete(Uri.parse('$apiBaseUrl/system-objects/${obj.id}'));
+      if (response.statusCode != 200 &&
+          response.statusCode != 204 &&
+          response.statusCode != 202) {
+        throw Exception('Status ${response.statusCode}');
+      }
+    } catch (e) {
+      message = 'No se pudo eliminar en el servidor ($e). El cambio es local.';
+    } finally {
+      setState(() {
+        final removed = _removeSystemObjectFromTree(obj.id);
+        if (removed != null) {
+          removedFromTree = true;
+          final removedIds = _collectIds(removed);
+          _openTabs.removeWhere((tab) => removedIds.contains(tab.id));
+          if (_selectedObject != null &&
+              removedIds.contains(_selectedObject!.id)) {
+            _selectedObject = null;
+          }
+          if (_selectedTabIndex >= _openTabs.length) {
+            _selectedTabIndex =
+                _openTabs.isNotEmpty ? _openTabs.length - 1 : 0;
+          }
+        }
+      });
+
+      if (!removedFromTree) {
+        message = 'No se encontró el objeto en el árbol.';
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  SystemObject? _removeSystemObjectFromTree(int id,
+      [List<SystemObject>? nodes]) {
+    final list = nodes ?? _treeData;
+    for (var i = 0; i < list.length; i++) {
+      final node = list[i];
+      if (node.id == id) {
+        return list.removeAt(i);
+      }
+      final removed = _removeSystemObjectFromTree(id, node.children);
+      if (removed != null) {
+        return removed;
+      }
+    }
+    return null;
+  }
+
+  List<int> _collectIds(SystemObject node) {
+    final ids = <int>[node.id];
+    for (final child in node.children) {
+      ids.addAll(_collectIds(child));
+    }
+    return ids;
   }
 
   bool _updateObjectNameInTree(int id, String newName,
@@ -921,6 +1018,15 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
   final _heightCtrl = TextEditingController();
   final _configCtrl = TextEditingController();
 
+  static const List<String> _widgetTypes = [
+    'text',
+    'bar',
+    'gauge',
+    'indicator',
+    'button'
+  ];
+  String? _selectedWidgetType;
+
   @override
   void initState() {
     super.initState();
@@ -938,6 +1044,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         _selectedScreen = null;
         _widgets = [];
         _selectedWidget = null;
+        _selectedWidgetType = null;
         _screens = [];
         _loadingWidgets = false;
         _error = null;
@@ -1059,6 +1166,17 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       setState(() {
         _widgets = widgets;
         _selectedWidget = widgets.isEmpty ? null : widgets.first;
+        _selectedWidgetType =
+            widgets.isEmpty ? null : _matchWidgetType(widgets.first.type);
+        if (widgets.isEmpty) {
+          _nameCtrl.clear();
+          _typeCtrl.clear();
+          _xCtrl.clear();
+          _yCtrl.clear();
+          _widthCtrl.clear();
+          _heightCtrl.clear();
+          _configCtrl.clear();
+        }
       });
       if (widgets.isNotEmpty) {
         _fillForm(widgets.first);
@@ -1069,6 +1187,9 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         setState(() {
           _widgets = mockWidgets;
           _selectedWidget = mockWidgets.isEmpty ? null : mockWidgets.first;
+          _selectedWidgetType = mockWidgets.isEmpty
+              ? null
+              : _matchWidgetType(mockWidgets.first.type);
           _error = 'No se pudieron cargar los widgets: $e. '
               'Se muestran datos de ejemplo.';
         });
@@ -1088,7 +1209,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     if (_selectedScreen == null) return;
     final screenId = _selectedScreen!.id;
     final payload = {
-      'type': 'Panel',
+      'type': _widgetTypes.first,
       'name': 'Nuevo Widget',
       'x': 40,
       'y': 40,
@@ -1207,6 +1328,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
   void _fillForm(GraphicWidget widget) {
     _nameCtrl.text = widget.name;
     _typeCtrl.text = widget.type;
+    _selectedWidgetType = _matchWidgetType(widget.type);
     _xCtrl.text = widget.x.toString();
     _yCtrl.text = widget.y.toString();
     _widthCtrl.text = widget.width.toString();
@@ -1226,6 +1348,15 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       });
     }
     return fallback;
+  }
+
+  String? _matchWidgetType(String type) {
+    for (final option in _widgetTypes) {
+      if (option.toLowerCase() == type.toLowerCase()) {
+        return option;
+      }
+    }
+    return null;
   }
 
   @override
@@ -1423,7 +1554,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
             runSpacing: 8,
             children: [
               _field('Name', _nameCtrl, width: 200),
-              _field('Type', _typeCtrl, width: 140),
+              _typeDropdown(),
               _field('X', _xCtrl, width: 80, keyboard: TextInputType.number),
               _field('Y', _yCtrl, width: 80, keyboard: TextInputType.number),
               _field('Width', _widthCtrl, width: 80,
@@ -1464,6 +1595,46 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
             ],
           )
         ],
+      ),
+    );
+  }
+
+  Widget _typeDropdown() {
+    final currentType = _typeCtrl.text.trim();
+    final options = [..._widgetTypes];
+    if (currentType.isNotEmpty &&
+        !options
+            .any((type) => type.toLowerCase() == currentType.toLowerCase())) {
+      options.add(currentType);
+    }
+
+    String? value;
+    for (final option in options) {
+      if (option.toLowerCase() == currentType.toLowerCase()) {
+        value = option;
+        break;
+      }
+    }
+    value ??= _selectedWidgetType;
+
+    return SizedBox(
+      width: 140,
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: const InputDecoration(
+          isDense: true,
+          labelText: 'Type',
+          border: OutlineInputBorder(),
+        ),
+        items: options
+            .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+            .toList(),
+        onChanged: (selected) {
+          setState(() {
+            _selectedWidgetType = selected;
+            _typeCtrl.text = selected ?? '';
+          });
+        },
       ),
     );
   }
