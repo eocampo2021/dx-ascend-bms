@@ -6,12 +6,49 @@ const router = Router();
 // Screens
 router.get("/screens", (req: Request, res: Response) => {
   const db = getDb();
+  const { route, name } = req.query;
+
   const rows = db
     .prepare(
       "SELECT id, name, route, description, enabled FROM screens ORDER BY id"
     )
     .all();
-  res.json(rows);
+
+  const normalizedRoute =
+    typeof route === "string" ? normalizeRoute(route.trim()) : undefined;
+  const normalizedName = typeof name === "string" ? name.trim() : undefined;
+
+  const filtered = rows.filter((row: any) => {
+    const matchesRoute = normalizedRoute
+      ? routeMatches(row.route, normalizedRoute)
+      : true;
+    const matchesName = normalizedName
+      ? row.name.toLowerCase() === normalizedName.toLowerCase()
+      : true;
+    return matchesRoute && matchesName;
+  });
+
+  res.json(filtered);
+});
+
+router.get("/screens/:id", (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ error: "id inválido" });
+  }
+
+  const db = getDb();
+  const row = db
+    .prepare(
+      "SELECT id, name, route, description, enabled FROM screens WHERE id = ?"
+    )
+    .get(id);
+
+  if (!row) {
+    return res.status(404).json({ error: "pantalla no encontrada" });
+  }
+
+  res.json(row);
 });
 
 router.post("/screens", (req: Request, res: Response) => {
@@ -309,6 +346,28 @@ function safeParseJson(input: string | null): any {
   } catch {
     return {};
   }
+}
+
+function normalizeRoute(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  return "/" + trimmed;
+}
+
+function routeMatches(dbRoute: string, search: string): boolean {
+  const normalizedDb = normalizeRoute(dbRoute);
+  const normalizedSearch = normalizeRoute(search);
+
+  if (normalizedDb.toLowerCase() === normalizedSearch.toLowerCase()) {
+    return true;
+  }
+
+  // Admitir búsquedas sin "/web" o sin slash inicial
+  const withoutWebDb = normalizedDb.replace(/^\/web\//i, "/");
+  const withoutWebSearch = normalizedSearch.replace(/^\/web\//i, "/");
+
+  return withoutWebDb.toLowerCase() === withoutWebSearch.toLowerCase();
 }
 
 export default router;

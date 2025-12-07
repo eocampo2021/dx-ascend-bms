@@ -189,19 +189,7 @@ router.get("/screen-by-route", (req: Request, res: Response) => {
   }
 
   const db = getDb();
-  let screen = db
-    .prepare(
-      "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
-    )
-    .get(routeRaw);
-
-  if (!screen && !routeRaw.startsWith("/")) {
-    screen = db
-      .prepare(
-        "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
-      )
-      .get("/" + routeRaw);
-  }
+  const screen = findScreenByRouteOrName(db, routeRaw);
 
   if (!screen) {
     return res.status(404).json({ error: "pantalla no encontrada para ese route" });
@@ -214,5 +202,120 @@ router.get("/screen-by-route", (req: Request, res: Response) => {
 
   res.json(runtime);
 });
+
+function buildRouteCandidates(raw: string) {
+  const normalized = (raw ?? "").trim();
+  const variants = new Set<string>();
+  if (!normalized) return variants;
+
+  variants.add(normalized);
+
+  const withoutSlashes = normalized.replace(/^\/+/, "");
+  variants.add(withoutSlashes);
+
+  if (!normalized.startsWith("/")) {
+    variants.add("/" + normalized);
+  }
+
+  if (!normalized.toLowerCase().startsWith("/web/")) {
+    variants.add("/web/" + withoutSlashes);
+  }
+
+  return variants;
+}
+
+function findScreenByRouteOrName(db: any, routeRaw: string) {
+  const normalized = (routeRaw ?? "").trim();
+  if (!normalized) return null;
+
+  const candidates = buildRouteCandidates(normalized);
+
+  for (const cand of candidates) {
+    const screen = db
+      .prepare(
+        "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
+      )
+      .get(cand);
+    if (screen) return screen;
+  }
+
+  const byName = db
+    .prepare(
+      "SELECT id, name, route, description FROM screens WHERE lower(name) = lower(?) AND enabled = 1"
+    )
+    .get(normalized);
+  if (byName) return byName;
+
+  // último recurso: buscar vínculos en system_objects para pantallas definidas en el árbol
+  const systemObjects = db
+    .prepare("SELECT id, name, properties FROM system_objects")
+    .all();
+
+  for (const obj of systemObjects) {
+    let props: any = {};
+    try {
+      props = obj.properties ? JSON.parse(obj.properties) : {};
+    } catch {
+      props = {};
+    }
+
+    const screenIdRaw = props.screenId ?? props.screen_id;
+    const screenId =
+      typeof screenIdRaw === "number"
+        ? screenIdRaw
+        : Number.isFinite(Number(screenIdRaw))
+        ? Number(screenIdRaw)
+        : null;
+
+    const propRoute = props.route ?? props.screenRoute ?? props.screen_route;
+    const propRouteStr = typeof propRoute === "string" ? propRoute : null;
+
+    const matchesName =
+      typeof obj.name === "string" &&
+      obj.name.toLowerCase() === normalized.toLowerCase();
+
+    const matchesRoute = propRouteStr
+      ? (() => {
+          const propCandidates = buildRouteCandidates(propRouteStr);
+          for (const cand of propCandidates) {
+            if (candidates.has(cand)) return true;
+            const trimmed = cand.replace(/^\/+/, "");
+            if (candidates.has(trimmed)) return true;
+            if (candidates.has("/" + trimmed)) return true;
+          }
+          return false;
+        })()
+      : false;
+
+    if ((matchesName || matchesRoute) && screenId != null) {
+      const screen = db
+        .prepare(
+          "SELECT id, name, route, description FROM screens WHERE id = ? AND enabled = 1"
+        )
+        .get(screenId);
+      if (screen) return screen;
+    }
+
+    if (matchesRoute && propRouteStr) {
+      const screen = db
+        .prepare(
+          "SELECT id, name, route, description FROM screens WHERE route = ? AND enabled = 1"
+        )
+        .get(propRouteStr);
+      if (screen) return screen;
+    }
+
+    if (matchesName) {
+      const screen = db
+        .prepare(
+          "SELECT id, name, route, description FROM screens WHERE lower(name) = lower(?) AND enabled = 1"
+        )
+        .get(obj.name);
+      if (screen) return screen;
+    }
+  }
+
+  return null;
+}
 
 export default router;

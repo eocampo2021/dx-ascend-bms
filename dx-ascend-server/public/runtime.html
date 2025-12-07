@@ -319,20 +319,22 @@
     }
 
     async function main() {
-      // URL esperada: /runtime/1, /runtime/2, etc.
-      const match = window.location.pathname.match(/\/runtime\/(\d+)/);
-      const screenId = match ? match[1] : null;
-
       const loadingEl = document.getElementById("loading");
+      const { screenId, screenRoute } = parseUrlForScreen();
 
-      if (!screenId) {
+      if (!screenId && !screenRoute) {
         loadingEl.textContent =
-          "Falta screenId en la URL. Usá por ejemplo /runtime/1";
+          "Falta pantalla en la URL. Usa /web/NombrePantalla o /runtime/1";
         return;
       }
 
       try {
-        const res = await fetch("/api/runtime/screen/" + screenId);
+        const res = screenId
+          ? await fetch("/api/runtime/screen/" + screenId)
+          : await fetch(
+              "/api/runtime/screen-by-route?route=" +
+                encodeURIComponent(screenRoute || "")
+            );
         if (!res.ok) {
           loadingEl.textContent =
             "Error al obtener pantalla: HTTP " + res.status;
@@ -340,10 +342,25 @@
         }
         const data = await res.json();
         renderScreen(data);
-        startAutoRefresh(screenId);
+        startAutoRefresh({ screenId, screenRoute });
       } catch (e) {
         loadingEl.textContent = "Error: " + e;
       }
+    }
+
+    function parseUrlForScreen() {
+      // /runtime/1 => id, /web/NombrePantalla => route/name
+      const runtimeMatch = window.location.pathname.match(/\/runtime\/(\d+)/);
+      if (runtimeMatch) {
+        return { screenId: runtimeMatch[1], screenRoute: null };
+      }
+
+      const webMatch = window.location.pathname.match(/\/web\/([^/]+)/);
+      if (webMatch) {
+        return { screenId: null, screenRoute: decodeURIComponent(webMatch[1]) };
+      }
+
+      return { screenId: null, screenRoute: null };
     }
 
     function renderScreen(data) {
@@ -519,10 +536,15 @@
       }
     }
 
-    function startAutoRefresh(screenId) {
+    function startAutoRefresh({ screenId, screenRoute }) {
       setInterval(async () => {
         try {
-          const res = await fetch("/api/runtime/screen/" + screenId);
+          const res = screenId
+            ? await fetch("/api/runtime/screen/" + screenId)
+            : await fetch(
+                "/api/runtime/screen-by-route?route=" +
+                  encodeURIComponent(screenRoute || "")
+              );
           if (!res.ok) return;
           const data = await res.json();
           renderScreen(data);
