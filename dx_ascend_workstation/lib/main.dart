@@ -459,8 +459,6 @@ class _MainShellState extends State<MainShell> {
       _baseCreateActions.first,
     ];
 
-    actions.addAll(_valueCreateActions);
-
     if (nodeType == 'server' || normalizedName.contains('program')) {
       actions.add(_baseCreateActions[1]);
     }
@@ -476,6 +474,8 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _showContextMenu(SystemObject node, Offset position) async {
     final actions = _getContextActions(node);
+    final bool canCreateValues =
+        node.type.toLowerCase() == 'server' || node.type.toLowerCase() == 'folder';
     final entries = <PopupMenuEntry<dynamic>>[
       PopupMenuItem(
         value: 'rename',
@@ -489,7 +489,7 @@ class _MainShellState extends State<MainShell> {
         value: 'delete',
         child: const Text('Eliminar objeto'),
       ),
-      if (actions.isNotEmpty) const PopupMenuDivider(),
+      if (actions.isNotEmpty || canCreateValues) const PopupMenuDivider(),
       ...actions
           .map(
             (action) => PopupMenuItem<_CreateAction>(
@@ -498,6 +498,28 @@ class _MainShellState extends State<MainShell> {
             ),
           )
           .toList(),
+      if (canCreateValues)
+        PopupMenuItem<_CreateAction>(
+          padding: EdgeInsets.zero,
+          child: PopupMenuButton<_CreateAction>(
+            padding: EdgeInsets.zero,
+            onSelected: (action) => Navigator.of(context).pop(action),
+            itemBuilder: (context) => _valueCreateActions
+                .map(
+                  (valueAction) => PopupMenuItem<_CreateAction>(
+                    value: valueAction,
+                    child: Text(valueAction.label),
+                  ),
+                )
+                .toList(),
+            child: const ListTile(
+              dense: true,
+              leading: Icon(Icons.category_outlined),
+              title: Text('Nuevo Value'),
+              trailing: Icon(Icons.chevron_right),
+            ),
+          ),
+        ),
     ];
 
     final selected = await showMenu<dynamic>(
@@ -791,6 +813,41 @@ class _MainShellState extends State<MainShell> {
     return _flattenTree().where((obj) => _isValueType(obj.type)).toList();
   }
 
+  Future<void> _saveObjectProperties(SystemObject obj,
+      Map<String, dynamic> properties, String successMessage) async {
+    bool savedRemotely = true;
+    try {
+      final response = await http.put(
+        Uri.parse('$apiBaseUrl/system-objects/${obj.id}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'properties': properties}),
+      );
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception('Status ${response.statusCode}');
+      }
+    } catch (e) {
+      savedRemotely = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'No se pudieron guardar los cambios en el servidor ($e). Se conservarán localmente.'),
+        ),
+      );
+    } finally {
+      setState(() {
+        _applyPropertiesToTree(obj.id, properties);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(savedRemotely
+              ? successMessage
+              : '$successMessage (solo en modo local)'),
+        ),
+      );
+    }
+  }
+
   Future<void> _updateObjectBindings(
       SystemObject obj, List<BindingAssignment> bindings) async {
     final bindingJson = bindings
@@ -804,24 +861,7 @@ class _MainShellState extends State<MainShell> {
       'bindings': bindingJson,
     };
 
-    try {
-      await http.put(
-        Uri.parse('$apiBaseUrl/system-objects/${obj.id}'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'properties': updatedProps}),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'No se pudieron guardar los bindings en el servidor ($e). Se guardarán localmente.'),
-        ),
-      );
-    } finally {
-      setState(() {
-        _applyPropertiesToTree(obj.id, updatedProps);
-      });
-    }
+    await _saveObjectProperties(obj, updatedProps, 'Bindings actualizados');
   }
 
   bool _applyPropertiesToTree(int id, Map<String, dynamic> properties,
@@ -898,6 +938,7 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildPropertyGrid(SystemObject obj) {
     final nameController = TextEditingController(text: obj.name);
+    final isValue = _isValueType(obj.type);
     return ListView(
       key: ValueKey(obj.id),
       children: [
@@ -928,6 +969,15 @@ class _MainShellState extends State<MainShell> {
         _propRow("Type", obj.type),
         _propRow("ID", obj.id.toString()),
         _propRow("Description", "System Object Node"),
+        if (isValue) ...[
+          const Divider(),
+          ValuePropertiesEditor(
+            key: ValueKey('value-props-${obj.id}-${obj.properties.hashCode}'),
+            object: obj,
+            onSave: (properties) =>
+                _saveObjectProperties(obj, properties, 'Propiedades del Value actualizadas'),
+          ),
+        ],
         const Divider(),
         const Text("Advanced",
             style:
@@ -1022,6 +1072,250 @@ class _EditorTab {
 
   @override
   int get hashCode => Object.hash(object.id, isBindings);
+}
+
+class ValuePropertiesEditor extends StatefulWidget {
+  final SystemObject object;
+  final Future<void> Function(Map<String, dynamic> properties) onSave;
+
+  const ValuePropertiesEditor({
+    super.key,
+    required this.object,
+    required this.onSave,
+  });
+
+  @override
+  State<ValuePropertiesEditor> createState() => _ValuePropertiesEditorState();
+}
+
+class _ValuePropertiesEditorState extends State<ValuePropertiesEditor> {
+  late String _status;
+  late String _forceStatus;
+  late bool _bindingActive;
+  late bool _boolValue;
+  late TextEditingController _numericController;
+  late TextEditingController _stringController;
+
+  @override
+  void initState() {
+    super.initState();
+    _numericController = TextEditingController();
+    _stringController = TextEditingController();
+    _loadFromObject();
+  }
+
+  @override
+  void didUpdateWidget(covariant ValuePropertiesEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.object.id != widget.object.id ||
+        !mapEquals(oldWidget.object.properties, widget.object.properties)) {
+      _loadFromObject();
+    }
+  }
+
+  @override
+  void dispose() {
+    _numericController.dispose();
+    _stringController.dispose();
+    super.dispose();
+  }
+
+  String get _kind {
+    final propKind = widget.object.properties['kind'];
+    if (propKind is String && propKind.isNotEmpty) {
+      return propKind.toLowerCase();
+    }
+    final lowerType = widget.object.type.toLowerCase();
+    if (lowerType.contains('digital')) return 'digital';
+    if (lowerType.contains('analog')) return 'analog';
+    return 'string';
+  }
+
+  bool get _isEnabled => _status.toLowerCase() == 'enabled';
+
+  bool get _isForced => _forceStatus.toLowerCase() == 'forced';
+
+  bool get _canEditValue => _isEnabled && (!_bindingActive || _isForced);
+
+  void _loadFromObject() {
+    final props = widget.object.properties;
+    _status = (props['status'] ?? 'Enabled').toString();
+    _forceStatus = (props['forceStatus'] ?? 'Not Forced').toString();
+    _bindingActive = props['bindingActive'] == true ||
+        props['writingFromBinding'] == true ||
+        props['valueFromBinding'] == true;
+
+    final dynamic rawValue = props['value'] ?? props['default'];
+    switch (_kind) {
+      case 'digital':
+        _boolValue = rawValue is bool
+            ? rawValue
+            : (rawValue is num ? rawValue != 0 : false);
+        break;
+      case 'analog':
+        final numValue = rawValue is num ? rawValue.toDouble() : 0.0;
+        _numericController.text = numValue.toString();
+        _boolValue = false;
+        break;
+      default:
+        _stringController.text = (rawValue ?? '').toString();
+        _boolValue = false;
+    }
+    setState(() {});
+  }
+
+  Widget _dropdown(
+      String label, String value, List<String> options, ValueChanged<String?> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          value: value,
+          isDense: true,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: options
+              .map((opt) => DropdownMenuItem<String>(
+                    value: opt,
+                    child: Text(opt),
+                  ))
+              .toList(),
+          onChanged: (val) => setState(() => onChanged(val)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildValueInput() {
+    final labelStyle = TextStyle(
+      color: _canEditValue ? Colors.black87 : Colors.grey.shade700,
+      fontWeight: FontWeight.w600,
+    );
+
+    switch (_kind) {
+      case 'digital':
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(4),
+            color: _canEditValue ? Colors.transparent : Colors.grey.shade200,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Valor', style: labelStyle),
+              Switch(
+                value: _boolValue,
+                onChanged: _canEditValue
+                    ? (val) => setState(() => _boolValue = val)
+                    : null,
+              ),
+            ],
+          ),
+        );
+      case 'analog':
+        return TextField(
+          controller: _numericController,
+          enabled: _canEditValue,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Valor',
+            isDense: true,
+            filled: !_canEditValue,
+            fillColor: Colors.grey.shade200,
+            border: const OutlineInputBorder(),
+          ),
+        );
+      default:
+        return TextField(
+          controller: _stringController,
+          enabled: _canEditValue,
+          decoration: InputDecoration(
+            labelText: 'Valor',
+            isDense: true,
+            filled: !_canEditValue,
+            fillColor: Colors.grey.shade200,
+            border: const OutlineInputBorder(),
+          ),
+        );
+    }
+  }
+
+  dynamic _currentValue() {
+    switch (_kind) {
+      case 'digital':
+        return _boolValue;
+      case 'analog':
+        return double.tryParse(_numericController.text.trim()) ?? 0.0;
+      default:
+        return _stringController.text;
+    }
+  }
+
+  Future<void> _save() async {
+    final props = {
+      ...widget.object.properties,
+      'kind': _kind,
+      'status': _status,
+      'forceStatus': _forceStatus,
+      'bindingActive': _bindingActive,
+      'value': _currentValue(),
+    };
+
+    await widget.onSave(props);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Atributos del Value',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        _buildValueInput(),
+        if (_bindingActive && !_isForced)
+          const Padding(
+            padding: EdgeInsets.only(top: 4.0),
+            child: Text(
+              'Valor provisto por un Binding (solo lectura).',
+              style: TextStyle(fontSize: 11, color: Colors.blueGrey),
+            ),
+          ),
+        const SizedBox(height: 10),
+        _dropdown('Estado', _status, const ['Enabled', 'Disabled'], (value) {
+          _status = value ?? 'Enabled';
+        }),
+        const SizedBox(height: 10),
+        _dropdown('Force Status', _forceStatus,
+            const ['Forced', 'Not Forced'], (value) {
+          _forceStatus = value ?? 'Not Forced';
+        }),
+        const SizedBox(height: 12),
+        const Text(
+          'En "Enabled" el valor puede cambiar por el operador o por Binding. En "Disabled" no se propagará ningún cambio.',
+          style: TextStyle(fontSize: 11, color: Colors.black54),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Si está en "Forced", el operador sobrescribe cualquier Binding y el valor se envía a los objetos vinculados.',
+          style: TextStyle(fontSize: 11, color: Colors.black54),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.save, size: 16),
+            label: const Text('Guardar cambios'),
+            onPressed: _save,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class BindingAssignment {
@@ -1127,9 +1421,6 @@ class _BindingsEditorViewState extends State<BindingsEditorView> {
   Future<void> _saveBindings() async {
     await widget.onSave(_bindings);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bindings actualizados')),
-      );
       setState(() {
         _bindings = _loadBindingsFromObject();
       });
