@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'models/graphic_widget.dart';
@@ -82,8 +83,29 @@ class _MainShellState extends State<MainShell> {
     ),
   ];
 
+  static const List<_CreateAction> _valueCreateActions = [
+    _CreateAction(
+      label: 'Nuevo valor digital',
+      type: 'Digital Value',
+      description: 'Punto digital para estados ON/OFF',
+      properties: {'kind': 'digital', 'default': false},
+    ),
+    _CreateAction(
+      label: 'Nuevo valor analógico',
+      type: 'Analog Value',
+      description: 'Punto analógico con valores numéricos',
+      properties: {'kind': 'analog', 'default': 0.0},
+    ),
+    _CreateAction(
+      label: 'Nuevo valor de texto',
+      type: 'String Value',
+      description: 'Punto de texto para mensajes o etiquetas',
+      properties: {'kind': 'string', 'default': ''},
+    ),
+  ];
+
   // Estado de las Pestañas (Work area)
-  final List<SystemObject> _openTabs = [];
+  final List<_EditorTab> _openTabs = [];
   int _selectedTabIndex = 0;
 
   // Objeto seleccionado actualmente (para el panel de propiedades)
@@ -151,22 +173,54 @@ class _MainShellState extends State<MainShell> {
         id: 3, name: 'HVAC Control Script', type: 'Script', parentId: 1);
     var graphics =
         SystemObject(id: 4, name: 'Floor Plan 1', type: 'Graphic', parentId: 1);
+    var valuesFolder =
+        SystemObject(id: 5, name: 'Values', type: 'Folder', parentId: 1);
+    var digitalValue = SystemObject(
+      id: 6,
+      name: 'Fan Command',
+      type: 'Digital Value',
+      parentId: 5,
+      properties: {'kind': 'digital', 'default': false},
+    );
+    var analogValue = SystemObject(
+      id: 7,
+      name: 'Supply Temp',
+      type: 'Analog Value',
+      parentId: 5,
+      properties: {'kind': 'analog', 'default': 21.0, 'units': '°C'},
+    );
+    var stringValue = SystemObject(
+      id: 8,
+      name: 'Alarm Message',
+      type: 'String Value',
+      parentId: 5,
+      properties: {'kind': 'string', 'default': 'OK'},
+    );
 
-    server.children.addAll([folderIo, script, graphics]);
+    valuesFolder.children.addAll([digitalValue, analogValue, stringValue]);
+
+    server.children.addAll([folderIo, script, graphics, valuesFolder]);
     server.isExpanded = true;
     return [server];
   }
 
   void _onObjectDoubleTap(SystemObject obj) {
-    if (!_openTabs.contains(obj)) {
+    _openEditorTab(obj);
+  }
+
+  void _openEditorTab(SystemObject obj, {bool bindings = false}) {
+    final index = _openTabs.indexWhere(
+        (tab) => tab.object.id == obj.id && tab.isBindings == bindings);
+
+    if (index == -1) {
       setState(() {
-        _openTabs.add(obj);
+        _openTabs.add(_EditorTab(object: obj, isBindings: bindings));
         _selectedTabIndex = _openTabs.length - 1;
         _selectedObject = obj;
       });
     } else {
       setState(() {
-        _selectedTabIndex = _openTabs.indexOf(obj);
+        _selectedTabIndex = index;
         _selectedObject = obj;
       });
     }
@@ -228,7 +282,8 @@ class _MainShellState extends State<MainShell> {
                           scrollDirection: Axis.horizontal,
                           itemCount: _openTabs.length,
                           itemBuilder: (context, index) {
-                            final obj = _openTabs[index];
+                            final tab = _openTabs[index];
+                            final obj = tab.object;
                             final isSelected = index == _selectedTabIndex;
                             return GestureDetector(
                               onTap: () =>
@@ -251,9 +306,15 @@ class _MainShellState extends State<MainShell> {
                                 ),
                                 child: Row(
                                   children: [
-                                    _getIconForType(obj.type, size: 14),
+                                    tab.isBindings
+                                        ? const Icon(Icons.link,
+                                            size: 14, color: Colors.blueGrey)
+                                        : _getIconForType(obj.type, size: 14),
                                     const SizedBox(width: 5),
-                                    Text(obj.name,
+                                    Text(
+                                        tab.isBindings
+                                            ? '${obj.name} [Bindings]'
+                                            : obj.name,
                                         style: const TextStyle(fontSize: 11)),
                                     const SizedBox(width: 5),
                                     InkWell(
@@ -398,6 +459,8 @@ class _MainShellState extends State<MainShell> {
       _baseCreateActions.first,
     ];
 
+    actions.addAll(_valueCreateActions);
+
     if (nodeType == 'server' || normalizedName.contains('program')) {
       actions.add(_baseCreateActions[1]);
     }
@@ -417,6 +480,10 @@ class _MainShellState extends State<MainShell> {
       PopupMenuItem(
         value: 'rename',
         child: const Text('Renombrar objeto'),
+      ),
+      PopupMenuItem(
+        value: 'bindings',
+        child: const Text('Editar bindings'),
       ),
       PopupMenuItem(
         value: 'delete',
@@ -442,6 +509,8 @@ class _MainShellState extends State<MainShell> {
 
     if (selected == 'rename') {
       _promptRename(node);
+    } else if (selected == 'bindings') {
+      _openEditorTab(node, bindings: true);
     } else if (selected == 'delete') {
       await _confirmDeleteSystemObject(node);
     } else if (selected is _CreateAction) {
@@ -656,7 +725,7 @@ class _MainShellState extends State<MainShell> {
         if (removed != null) {
           removedFromTree = true;
           final removedIds = _collectIds(removed);
-          _openTabs.removeWhere((tab) => removedIds.contains(tab.id));
+          _openTabs.removeWhere((tab) => removedIds.contains(tab.object.id));
           if (_selectedObject != null &&
               removedIds.contains(_selectedObject!.id)) {
             _selectedObject = null;
@@ -701,6 +770,85 @@ class _MainShellState extends State<MainShell> {
     return ids;
   }
 
+  List<SystemObject> _flattenTree([List<SystemObject>? nodes]) {
+    final list = nodes ?? _treeData;
+    final result = <SystemObject>[];
+    for (final node in list) {
+      result.add(node);
+      result.addAll(_flattenTree(node.children));
+    }
+    return result;
+  }
+
+  bool _isValueType(String type) {
+    final lower = type.toLowerCase();
+    return lower == 'digital value' ||
+        lower == 'analog value' ||
+        lower == 'string value';
+  }
+
+  List<SystemObject> _collectValueObjects() {
+    return _flattenTree().where((obj) => _isValueType(obj.type)).toList();
+  }
+
+  Future<void> _updateObjectBindings(
+      SystemObject obj, List<BindingAssignment> bindings) async {
+    final bindingJson = bindings
+        .where((binding) =>
+            binding.target != null && binding.slot.trim().isNotEmpty)
+        .map((binding) => binding.toJson())
+        .toList();
+
+    final Map<String, dynamic> updatedProps = {
+      ...obj.properties,
+      'bindings': bindingJson,
+    };
+
+    try {
+      await http.put(
+        Uri.parse('$apiBaseUrl/system-objects/${obj.id}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'properties': updatedProps}),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'No se pudieron guardar los bindings en el servidor ($e). Se guardarán localmente.'),
+        ),
+      );
+    } finally {
+      setState(() {
+        _applyPropertiesToTree(obj.id, updatedProps);
+      });
+    }
+  }
+
+  bool _applyPropertiesToTree(int id, Map<String, dynamic> properties,
+      [List<SystemObject>? nodes]) {
+    final list = nodes ?? _treeData;
+    for (final node in list) {
+      if (node.id == id) {
+        node.properties
+          ..clear()
+          ..addAll(properties);
+        if (_selectedObject?.id == id) {
+          _selectedObject = node;
+        }
+        for (final tab in _openTabs.where((tab) => tab.object.id == id)) {
+          tab.object.properties
+            ..clear()
+            ..addAll(properties);
+        }
+        return true;
+      }
+      if (_applyPropertiesToTree(id, properties, node.children)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool _updateObjectNameInTree(int id, String newName,
       [List<SystemObject>? nodes]) {
     final list = nodes ?? _treeData;
@@ -711,8 +859,8 @@ class _MainShellState extends State<MainShell> {
           _selectedObject = node;
         }
         for (var i = 0; i < _openTabs.length; i++) {
-          if (_openTabs[i].id == id) {
-            _openTabs[i].name = newName;
+          if (_openTabs[i].object.id == id) {
+            _openTabs[i].object.name = newName;
           }
         }
         return true;
@@ -724,12 +872,26 @@ class _MainShellState extends State<MainShell> {
     return false;
   }
 
-  Widget _buildEditorContent(SystemObject obj) {
+  Widget _buildEditorContent(_EditorTab tab) {
+    final obj = tab.object;
+    if (tab.isBindings) {
+      return BindingsEditorView(
+        key: ValueKey('bindings-${obj.id}'),
+        systemObject: obj,
+        availableValues: _collectValueObjects(),
+        onSave: (bindings) => _updateObjectBindings(obj, bindings),
+      );
+    }
+
     final type = obj.type.toLowerCase();
     if (type == 'script' || type == 'program') {
       return const ScriptEditorView();
     } else if (type == 'graphic' || type == 'screen') {
-      return GraphicsEditorView(key: ValueKey(obj.id), systemObject: obj);
+      return GraphicsEditorView(
+        key: ValueKey('graphic-${obj.id}'),
+        systemObject: obj,
+        availableValues: _collectValueObjects(),
+      );
     }
     return Center(child: Text("Generic Editor for ${obj.name}"));
   }
@@ -819,6 +981,12 @@ class _MainShellState extends State<MainShell> {
       case 'graphic':
       case 'screen':
         return Icon(Icons.image, color: Colors.purple, size: size);
+      case 'digital value':
+        return Icon(Icons.toggle_on, color: Colors.blue, size: size);
+      case 'analog value':
+        return Icon(Icons.show_chart, color: Colors.orange, size: size);
+      case 'string value':
+        return Icon(Icons.short_text, color: Colors.teal, size: size);
       default:
         return Icon(Icons.insert_drive_file, size: size);
     }
@@ -837,6 +1005,279 @@ class _CreateAction {
     required this.description,
     this.properties,
   });
+}
+
+class _EditorTab {
+  final SystemObject object;
+  final bool isBindings;
+
+  _EditorTab({required this.object, this.isBindings = false});
+
+  @override
+  bool operator ==(Object other) {
+    return other is _EditorTab &&
+        other.object.id == object.id &&
+        other.isBindings == isBindings;
+  }
+
+  @override
+  int get hashCode => Object.hash(object.id, isBindings);
+}
+
+class BindingAssignment {
+  String slot;
+  SystemObject? target;
+
+  BindingAssignment({required this.slot, this.target});
+
+  Map<String, dynamic> toJson() => {
+        'slot': slot,
+        'valueId': target?.id,
+        'valueName': target?.name,
+        'valueType': target?.type,
+      };
+
+  static BindingAssignment fromJson(
+      Map<String, dynamic> json, List<SystemObject> availableValues) {
+    final slot = (json['slot'] ?? json['name'] ?? 'binding').toString();
+    SystemObject? target;
+
+    final idValue = json['valueId'] ?? json['targetId'];
+    int? parsedId;
+    if (idValue is int) parsedId = idValue;
+    if (idValue is String) parsedId = int.tryParse(idValue);
+    if (parsedId != null) {
+      for (final value in availableValues) {
+        if (value.id == parsedId) {
+          target = value;
+          break;
+        }
+      }
+    }
+
+    if (target == null && json['valueName'] is String) {
+      final name = json['valueName'] as String;
+      for (final value in availableValues) {
+        if (value.name == name) {
+          target = value;
+          break;
+        }
+      }
+    }
+
+    return BindingAssignment(slot: slot, target: target);
+  }
+}
+
+class BindingsEditorView extends StatefulWidget {
+  final SystemObject systemObject;
+  final List<SystemObject> availableValues;
+  final Future<void> Function(List<BindingAssignment> bindings) onSave;
+
+  const BindingsEditorView({
+    super.key,
+    required this.systemObject,
+    required this.availableValues,
+    required this.onSave,
+  });
+
+  @override
+  State<BindingsEditorView> createState() => _BindingsEditorViewState();
+}
+
+class _BindingsEditorViewState extends State<BindingsEditorView> {
+  late List<BindingAssignment> _bindings;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindings = _loadBindingsFromObject();
+  }
+
+  @override
+  void didUpdateWidget(covariant BindingsEditorView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldIds = oldWidget.availableValues.map((e) => e.id).toSet();
+    final newIds = widget.availableValues.map((e) => e.id).toSet();
+    if (!setEquals(oldIds, newIds)) {
+      setState(() {
+        _bindings = _loadBindingsFromObject();
+      });
+    }
+  }
+
+  List<BindingAssignment> _loadBindingsFromObject() {
+    final rawBindings = widget.systemObject.properties['bindings'];
+    if (rawBindings is List) {
+      return rawBindings
+          .whereType<Map<String, dynamic>>()
+          .map((raw) => BindingAssignment.fromJson(raw, widget.availableValues))
+          .toList();
+    }
+    return [];
+  }
+
+  void _addBinding() {
+    setState(() {
+      _bindings.add(BindingAssignment(
+          slot: 'binding-${_bindings.length + 1}', target: null));
+    });
+  }
+
+  Future<void> _saveBindings() async {
+    await widget.onSave(_bindings);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bindings actualizados')),
+      );
+      setState(() {
+        _bindings = _loadBindingsFromObject();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Bindings de ${widget.systemObject.name}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Chip(
+                avatar: const Icon(Icons.storage, size: 14),
+                label: Text('${widget.availableValues.length} valores disponibles'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+              'Selecciona los valores que se vincularán a este objeto. Estos bindings podrán usarse en widgets de las pantallas.'),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _bindings.isEmpty
+                ? const Center(
+                    child: Text('No hay bindings configurados para este objeto.'),
+                  )
+                : ListView.separated(
+                    itemCount: _bindings.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) => _buildBindingRow(index),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _saveBindings,
+                icon: const Icon(Icons.save, size: 16),
+                label: const Text('Guardar bindings'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _addBinding,
+                icon: const Icon(Icons.add_link, size: 16),
+                label: const Text('Agregar binding'),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => setState(() {
+                  _bindings = _loadBindingsFromObject();
+                }),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Recargar'),
+              )
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBindingRow(int index) {
+    final binding = _bindings[index];
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: binding.slot,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Etiqueta del binding',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) => binding.slot = value,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: _bindingDropdown(binding)),
+                IconButton(
+                  tooltip: 'Eliminar binding',
+                  onPressed: () {
+                    setState(() {
+                      _bindings.removeAt(index);
+                    });
+                  },
+                  icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+                )
+              ],
+            ),
+            if (binding.target != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6.0),
+                child: Text(
+                  'Tipo: ${binding.target!.type} • ID: ${binding.target!.id}',
+                  style:
+                      const TextStyle(fontSize: 11, color: Colors.blueGrey),
+                ),
+              )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _bindingDropdown(BindingAssignment binding) {
+    return DropdownButtonFormField<SystemObject?>(
+      value: binding.target,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        labelText: 'Valor vinculado',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem<SystemObject?>(
+          value: null,
+          child: Text('Sin valor'),
+        ),
+        ...widget.availableValues.map(
+          (value) => DropdownMenuItem<SystemObject?>(
+            value: value,
+            child: Text('${value.name} (${value.type})'),
+          ),
+        ),
+      ],
+      onChanged: (selected) {
+        setState(() {
+          binding.target = selected;
+        });
+      },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -995,7 +1436,11 @@ class ScriptEditorView extends StatelessWidget {
 // Editor de Gráficos (Estilo EBO)
 class GraphicsEditorView extends StatefulWidget {
   final SystemObject systemObject;
-  const GraphicsEditorView({super.key, required this.systemObject});
+  final List<SystemObject> availableValues;
+  const GraphicsEditorView(
+      {super.key,
+      required this.systemObject,
+      required this.availableValues});
 
   @override
   State<GraphicsEditorView> createState() => _GraphicsEditorViewState();
@@ -1006,6 +1451,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
   List<GraphicWidget> _widgets = [];
   Screen? _selectedScreen;
   GraphicWidget? _selectedWidget;
+  SystemObject? _selectedBindingValue;
   bool _loadingScreens = true;
   bool _loadingWidgets = false;
   String? _error;
@@ -1050,6 +1496,15 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         _error = null;
       });
       _loadScreenForTab();
+    }
+
+    final oldIds = oldWidget.availableValues.map((e) => e.id).toSet();
+    final newIds = widget.availableValues.map((e) => e.id).toSet();
+    if (!setEquals(oldIds, newIds) && _selectedWidget != null) {
+      setState(() {
+        _selectedBindingValue =
+            _matchBindingFromConfig(_selectedWidget!.config);
+      });
     }
   }
 
@@ -1168,6 +1623,9 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         _selectedWidget = widgets.isEmpty ? null : widgets.first;
         _selectedWidgetType =
             widgets.isEmpty ? null : _matchWidgetType(widgets.first.type);
+        _selectedBindingValue = widgets.isEmpty
+            ? null
+            : _matchBindingFromConfig(widgets.first.config);
         if (widgets.isEmpty) {
           _nameCtrl.clear();
           _typeCtrl.clear();
@@ -1190,6 +1648,9 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
           _selectedWidgetType = mockWidgets.isEmpty
               ? null
               : _matchWidgetType(mockWidgets.first.type);
+          _selectedBindingValue = mockWidgets.isEmpty
+              ? null
+              : _matchBindingFromConfig(mockWidgets.first.config);
           _error = 'No se pudieron cargar los widgets: $e. '
               'Se muestran datos de ejemplo.';
         });
@@ -1239,6 +1700,16 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     if (widget == null || screen == null) return;
 
     final parsedConfig = _safeParseConfig(_configCtrl.text, widget.config);
+    final updatedConfig = Map<String, dynamic>.from(parsedConfig);
+    if (_selectedBindingValue != null) {
+      updatedConfig['binding'] = {
+        'valueId': _selectedBindingValue!.id,
+        'valueName': _selectedBindingValue!.name,
+        'valueType': _selectedBindingValue!.type,
+      };
+    } else {
+      updatedConfig.remove('binding');
+    }
 
     final payload = {
       'id': widget.id,
@@ -1249,7 +1720,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       'y': int.tryParse(_yCtrl.text) ?? widget.y,
       'width': int.tryParse(_widthCtrl.text) ?? widget.width,
       'height': int.tryParse(_heightCtrl.text) ?? widget.height,
-      'config_json': parsedConfig,
+      'config_json': updatedConfig,
     };
 
     final response = await http.put(
@@ -1333,7 +1804,9 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     _yCtrl.text = widget.y.toString();
     _widthCtrl.text = widget.width.toString();
     _heightCtrl.text = widget.height.toString();
+    _selectedBindingValue = _matchBindingFromConfig(widget.config);
     _configCtrl.text = const JsonEncoder.withIndent('  ').convert(widget.config);
+    setState(() {});
   }
 
   Map<String, dynamic> _safeParseConfig(
@@ -1354,6 +1827,30 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     for (final option in _widgetTypes) {
       if (option.toLowerCase() == type.toLowerCase()) {
         return option;
+      }
+    }
+    return null;
+  }
+
+  SystemObject? _matchBindingFromConfig(Map<String, dynamic> config) {
+    final binding = config['binding'];
+    if (binding is Map<String, dynamic>) {
+      final idValue = binding['valueId'] ?? binding['targetId'];
+      int? targetId;
+      if (idValue is int) targetId = idValue;
+      if (idValue is String) targetId = int.tryParse(idValue);
+
+      if (targetId != null) {
+        for (final value in widget.availableValues) {
+          if (value.id == targetId) return value;
+        }
+      }
+
+      final name = binding['valueName'];
+      if (name is String) {
+        for (final value in widget.availableValues) {
+          if (value.name == name) return value;
+        }
       }
     }
     return null;
@@ -1496,6 +1993,12 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
   }
 
   Widget _buildWidgetShape(GraphicWidget widget) {
+    final binding = widget.config['binding'];
+    final bindingLabel = binding is Map<String, dynamic>
+        ? (binding['valueName'] ??
+            binding['valueId']?.toString() ??
+            binding['targetId']?.toString())
+        : null;
     return Positioned(
       left: widget.x.toDouble(),
       top: widget.y.toDouble(),
@@ -1525,6 +2028,13 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 12)),
               Text(widget.type, style: const TextStyle(fontSize: 10)),
+              if (bindingLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: Text('Binding: $bindingLabel',
+                      style: const TextStyle(
+                          fontSize: 9, color: Colors.blueGrey)),
+                ),
               const Spacer(),
               if (widget.config.isNotEmpty)
                 Text(widget.config.toString(),
@@ -1563,6 +2073,8 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                   keyboard: TextInputType.number),
             ],
           ),
+          const SizedBox(height: 8),
+          _bindingDropdown(),
           const SizedBox(height: 8),
           const Text('Config JSON'),
           SizedBox(
@@ -1633,6 +2145,38 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
           setState(() {
             _selectedWidgetType = selected;
             _typeCtrl.text = selected ?? '';
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _bindingDropdown() {
+    return SizedBox(
+      width: 260,
+      child: DropdownButtonFormField<SystemObject?>(
+        value: _selectedBindingValue,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          isDense: true,
+          labelText: 'Binding (Value object)',
+          border: OutlineInputBorder(),
+        ),
+        items: [
+          const DropdownMenuItem<SystemObject?>(
+            value: null,
+            child: Text('Sin binding'),
+          ),
+          ...widget.availableValues.map(
+            (value) => DropdownMenuItem<SystemObject?>(
+              value: value,
+              child: Text('${value.name} • ${value.type}'),
+            ),
+          ),
+        ],
+        onChanged: (selected) {
+          setState(() {
+            _selectedBindingValue = selected;
           });
         },
       ),
