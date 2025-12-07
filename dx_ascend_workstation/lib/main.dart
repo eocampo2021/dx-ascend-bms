@@ -632,7 +632,7 @@ class _MainShellState extends State<MainShell> {
     if (type == 'script' || type == 'program') {
       return const ScriptEditorView();
     } else if (type == 'graphic' || type == 'screen') {
-      return GraphicsEditorView(systemObject: obj);
+      return GraphicsEditorView(key: ValueKey(obj.id), systemObject: obj);
     }
     return Center(child: Text("Generic Editor for ${obj.name}"));
   }
@@ -925,6 +925,25 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
   void initState() {
     super.initState();
     _loadScreenForTab();
+  }
+
+  @override
+  void didUpdateWidget(covariant GraphicsEditorView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.systemObject.id != widget.systemObject.id ||
+        oldWidget.systemObject.screenId != widget.systemObject.screenId ||
+        oldWidget.systemObject.screenRoute != widget.systemObject.screenRoute ||
+        oldWidget.systemObject.name != widget.systemObject.name) {
+      setState(() {
+        _selectedScreen = null;
+        _widgets = [];
+        _selectedWidget = null;
+        _screens = [];
+        _loadingWidgets = false;
+        _error = null;
+      });
+      _loadScreenForTab();
+    }
   }
 
   @override
