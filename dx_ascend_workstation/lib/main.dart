@@ -58,6 +58,30 @@ class _MainShellState extends State<MainShell> {
   List<SystemObject> _treeData = [];
   bool _isLoading = true;
 
+  /// Opciones base disponibles en los menús contextuales del árbol
+  static const List<_CreateAction> _baseCreateActions = [
+    _CreateAction(
+      label: 'Nueva carpeta',
+      type: 'folder',
+      description: 'Carpeta para organizar objetos',
+    ),
+    _CreateAction(
+      label: 'Nuevo programa',
+      type: 'program',
+      description: 'Programa o script de control',
+    ),
+    _CreateAction(
+      label: 'Nuevo script',
+      type: 'script',
+      description: 'Script asociado al servidor',
+    ),
+    _CreateAction(
+      label: 'Nuevo gráfico',
+      type: 'Graphic',
+      description: 'Pantalla o gráfico vinculado a un screen',
+    ),
+  ];
+
   // Estado de las Pestañas (Work area)
   final List<SystemObject> _openTabs = [];
   int _selectedTabIndex = 0;
@@ -320,9 +344,12 @@ class _MainShellState extends State<MainShell> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => _onObjectTap(node),
           onDoubleTap: () => _onObjectDoubleTap(node),
+          onSecondaryTapDown: (details) =>
+              _showContextMenu(node, details.globalPosition),
           child: Container(
             color: _selectedObject == node
                 ? const Color(0xFFCCE8FF)
@@ -357,6 +384,130 @@ class _MainShellState extends State<MainShell> {
           ...node.children.map((child) => _buildTreeNode(child, depth + 1)),
       ],
     );
+  }
+
+  List<_CreateAction> _getContextActions(SystemObject node) {
+    final nodeType = node.type.toLowerCase();
+    if (nodeType != 'server' && nodeType != 'folder') {
+      return const <_CreateAction>[];
+    }
+
+    // Ajustamos el menú según el nombre de la carpeta para dar acciones relevantes
+    final normalizedName = node.name.toLowerCase();
+    final List<_CreateAction> actions = [
+      _baseCreateActions.first,
+    ];
+
+    if (nodeType == 'server' || normalizedName.contains('program')) {
+      actions.add(_baseCreateActions[1]);
+    }
+    if (nodeType == 'server' || normalizedName.contains('script')) {
+      actions.add(_baseCreateActions[2]);
+    }
+    if (nodeType == 'server' || normalizedName.contains('graphic')) {
+      actions.add(_baseCreateActions[3]);
+    }
+
+    return actions;
+  }
+
+  Future<void> _showContextMenu(SystemObject node, Offset position) async {
+    final actions = _getContextActions(node);
+    if (actions.isEmpty) return;
+
+    final selected = await showMenu<_CreateAction>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          position.dx, position.dy, position.dx, position.dy),
+      items: actions
+          .map(
+            (action) => PopupMenuItem<_CreateAction>(
+              value: action,
+              child: Text(action.label),
+            ),
+          )
+          .toList(),
+    );
+
+    if (selected != null) {
+      await _createSystemObject(node, selected);
+    }
+  }
+
+  Future<void> _createSystemObject(
+      SystemObject parent, _CreateAction action) async {
+    final payload = {
+      'parent_id': parent.id,
+      'name': action.label,
+      'type': action.type,
+      'description': action.description,
+      'properties': action.properties ?? <String, dynamic>{},
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/system-objects'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final created = SystemObject.fromJson({
+          'id': data['id'] ?? DateTime.now().millisecondsSinceEpoch,
+          'parent_id': parent.id,
+          'name': data['name'] ?? payload['name'],
+          'type': data['type'] ?? payload['type'],
+          'properties': data['properties'] ?? payload['properties'],
+        });
+
+        setState(() {
+          _attachChildToTree(parent.id, created);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${action.label} creado en ${parent.name}')),
+        );
+      } else {
+        throw Exception('Status ${response.statusCode}');
+      }
+    } catch (e) {
+      // Fallback local cuando no hay backend: añade el objeto de manera temporal
+      final localObj = SystemObject(
+        id: DateTime.now().millisecondsSinceEpoch,
+        parentId: parent.id,
+        name: '${action.label} (local)',
+        type: action.type,
+        properties: action.properties ?? {},
+      );
+
+      setState(() {
+        _attachChildToTree(parent.id, localObj);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Creado en modo local por falta de conexión: ${action.label}'),
+        ),
+      );
+    }
+  }
+
+  bool _attachChildToTree(int parentId, SystemObject child,
+      [List<SystemObject>? nodes]) {
+    final list = nodes ?? _treeData;
+    for (final node in list) {
+      if (node.id == parentId) {
+        node.children.add(child);
+        node.isExpanded = true;
+        return true;
+      }
+      if (_attachChildToTree(parentId, child, node.children)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Widget _buildEditorContent(SystemObject obj) {
@@ -422,6 +573,20 @@ class _MainShellState extends State<MainShell> {
         return Icon(Icons.insert_drive_file, size: size);
     }
   }
+}
+
+class _CreateAction {
+  final String label;
+  final String type;
+  final String description;
+  final Map<String, dynamic>? properties;
+
+  const _CreateAction({
+    required this.label,
+    required this.type,
+    required this.description,
+    this.properties,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -664,17 +829,25 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       });
 
       if (initial != null) {
-        await _loadWidgets(initial.id);
+        await _loadWidgets(initial.id, allowMock: true);
       }
     } catch (e) {
+      final mockScreens = _buildMockScreens();
       setState(() {
+        _screens = mockScreens;
+        _selectedScreen = mockScreens.isNotEmpty ? mockScreens.first : null;
         _loadingScreens = false;
-        _error = 'No se pudieron cargar las pantallas: $e';
+        _error = 'No se pudieron cargar las pantallas: $e. '
+            'Se muestran datos de ejemplo.';
       });
+
+      if (_selectedScreen != null) {
+        await _loadWidgets(_selectedScreen!.id, allowMock: true);
+      }
     }
   }
 
-  Future<void> _loadWidgets(int screenId) async {
+  Future<void> _loadWidgets(int screenId, {bool allowMock = false}) async {
     setState(() {
       _loadingWidgets = true;
       _error = null;
@@ -696,9 +869,19 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         _fillForm(widgets.first);
       }
     } catch (e) {
-      setState(() {
-        _error = 'No se pudieron cargar los widgets: $e';
-      });
+      if (allowMock) {
+        final mockWidgets = _buildMockWidgets(screenId);
+        setState(() {
+          _widgets = mockWidgets;
+          _selectedWidget = mockWidgets.isEmpty ? null : mockWidgets.first;
+          _error = 'No se pudieron cargar los widgets: $e. '
+              'Se muestran datos de ejemplo.';
+        });
+      } else {
+        setState(() {
+          _error = 'No se pudieron cargar los widgets: $e';
+        });
+      }
     } finally {
       setState(() {
         _loadingWidgets = false;
@@ -726,7 +909,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     );
 
     if (response.statusCode == 201) {
-      await _loadWidgets(screenId);
+      await _loadWidgets(screenId, allowMock: true);
     } else {
       setState(() {
         _error = 'No se pudo crear el widget (${response.statusCode})';
@@ -760,7 +943,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     );
 
     if (response.statusCode == 200) {
-      await _loadWidgets(screen.id);
+      await _loadWidgets(screen.id, allowMock: true);
     } else {
       setState(() {
         _error = 'Error guardando el widget (${response.statusCode})';
@@ -776,12 +959,52 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     final response =
         await http.delete(Uri.parse('$apiBaseUrl/widgets/${widget.id}'));
     if (response.statusCode == 204) {
-      await _loadWidgets(screen.id);
+      await _loadWidgets(screen.id, allowMock: true);
     } else {
       setState(() {
         _error = 'No se pudo eliminar el widget (${response.statusCode})';
       });
     }
+  }
+
+  List<Screen> _buildMockScreens() {
+    final mockId = widget.systemObject.screenId ?? 999;
+    return [
+      Screen(
+        id: mockId,
+        name: widget.systemObject.name,
+        route: widget.systemObject.screenRoute ?? '/demo/${widget.systemObject.id}',
+        description: 'Vista de ejemplo cuando no hay backend',
+        enabled: true,
+      ),
+    ];
+  }
+
+  List<GraphicWidget> _buildMockWidgets(int screenId) {
+    return [
+      GraphicWidget(
+        id: screenId * 1000 + 1,
+        screenId: screenId,
+        type: 'Panel',
+        name: 'Panel de muestra',
+        x: 30,
+        y: 30,
+        width: 180,
+        height: 80,
+        config: {'note': 'Sin backend, datos de ejemplo'},
+      ),
+      GraphicWidget(
+        id: screenId * 1000 + 2,
+        screenId: screenId,
+        type: 'Value',
+        name: 'Temperatura',
+        x: 240,
+        y: 120,
+        width: 120,
+        height: 70,
+        config: {'label': 'Temp', 'value': '23.0°C'},
+      ),
+    ];
   }
 
   void _fillForm(GraphicWidget widget) {
@@ -835,7 +1058,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                     _selectedScreen = value;
                   });
                   if (value != null) {
-                    _loadWidgets(value.id);
+                    _loadWidgets(value.id, allowMock: true);
                   }
                 },
               ),
@@ -847,8 +1070,9 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed:
-                    _selectedScreen == null || _loadingWidgets ? null : _createWidget,
+                onPressed: _selectedScreen == null || _loadingWidgets
+                    ? null
+                    : _createWidget,
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Agregar widget'),
               ),
