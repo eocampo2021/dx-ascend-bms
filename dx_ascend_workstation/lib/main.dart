@@ -2147,6 +2147,30 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     return null;
   }
 
+  String? _formatBindingValue(SystemObject? target) {
+    if (target == null) return null;
+    final props = target.properties;
+    dynamic value = props['value'] ?? props['default'];
+    final unit = props['units'] ?? props['unit'];
+
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      if (parsed != null) value = parsed;
+    }
+
+    if (value is num) {
+      final decimals = value is int ? 0 : 1;
+      final base = value.toStringAsFixed(decimals);
+      if (unit != null && unit.toString().isNotEmpty) {
+        return '$base ${unit.toString()}';
+      }
+      return base;
+    }
+
+    if (value is bool) return value ? 'ON' : 'OFF';
+    return value?.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -2290,6 +2314,8 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
             binding['valueId']?.toString() ??
             binding['targetId']?.toString())
         : null;
+    final bindingTarget = _matchBindingFromConfig(widget.config);
+    final bindingValueLabel = _formatBindingValue(bindingTarget);
     return Positioned(
       left: widget.x.toDouble(),
       top: widget.y.toDouble(),
@@ -2325,6 +2351,13 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                   child: Text('Binding: $bindingLabel',
                       style: const TextStyle(
                           fontSize: 9, color: Colors.blueGrey)),
+                ),
+              if (bindingValueLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: Text('Valor: $bindingValueLabel',
+                      style: const TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w600)),
                 ),
               const Spacer(),
               if (widget.config.isNotEmpty)
