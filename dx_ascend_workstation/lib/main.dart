@@ -108,6 +108,10 @@ class _MainShellState extends State<MainShell> {
   final List<_EditorTab> _openTabs = [];
   int _selectedTabIndex = 0;
 
+  // Estado del panel derecho y selección de widget en el editor gráfico
+  bool _isRightPanelCollapsed = false;
+  GraphicWidget? _selectedGraphicWidget;
+
   // Objeto seleccionado actualmente (para el panel de propiedades)
   SystemObject? _selectedObject;
 
@@ -217,11 +221,15 @@ class _MainShellState extends State<MainShell> {
         _openTabs.add(_EditorTab(object: obj, isBindings: bindings));
         _selectedTabIndex = _openTabs.length - 1;
         _selectedObject = obj;
+        _selectedGraphicWidget = null;
       });
     } else {
       setState(() {
         _selectedTabIndex = index;
         _selectedObject = obj;
+        if (!_isGraphicTab(_openTabs[index])) {
+          _selectedGraphicWidget = null;
+        }
       });
     }
   }
@@ -232,8 +240,16 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  void _onWidgetSelected(GraphicWidget? widget) {
+    setState(() {
+      _selectedGraphicWidget = widget;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final _EditorTab? currentTab =
+        _openTabs.isEmpty ? null : _openTabs[_selectedTabIndex];
     return Scaffold(
       body: Column(
         children: [
@@ -286,8 +302,12 @@ class _MainShellState extends State<MainShell> {
                             final obj = tab.object;
                             final isSelected = index == _selectedTabIndex;
                             return GestureDetector(
-                              onTap: () =>
-                                  setState(() => _selectedTabIndex = index),
+                              onTap: () => setState(() {
+                                _selectedTabIndex = index;
+                                if (!_isGraphicTab(tab)) {
+                                  _selectedGraphicWidget = null;
+                                }
+                              }),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 6),
@@ -356,27 +376,7 @@ class _MainShellState extends State<MainShell> {
                   ),
                 ),
 
-                const VerticalDivider(
-                    width: 1, thickness: 1, color: Color(0xFFC0C0C0)),
-
-                // PANEL DERECHO: PROPERTIES
-                SizedBox(
-                  width: 250,
-                  child: Column(
-                    children: [
-                      const PanelHeader(title: 'Properties'),
-                      Expanded(
-                        child: Container(
-                          color: Colors.white,
-                          padding: const EdgeInsets.all(8.0),
-                          child: _selectedObject == null
-                              ? const Text("No selection")
-                              : _buildPropertyGrid(_selectedObject!),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _buildRightSidebar(currentTab),
               ],
             ),
           ),
@@ -924,6 +924,9 @@ class _MainShellState extends State<MainShell> {
     }
 
     final type = obj.type.toLowerCase();
+    if (type == 'folder') {
+      return _buildFolderListView(obj);
+    }
     if (type == 'script' || type == 'program') {
       return const ScriptEditorView();
     } else if (type == 'graphic' || type == 'screen') {
@@ -931,9 +934,102 @@ class _MainShellState extends State<MainShell> {
         key: ValueKey('graphic-${obj.id}'),
         systemObject: obj,
         availableValues: _collectValueObjects(),
+        onWidgetSelected: _onWidgetSelected,
       );
     }
     return Center(child: Text("Generic Editor for ${obj.name}"));
+  }
+
+  Widget _buildFolderListView(SystemObject folder) {
+    final rows = folder.children;
+
+    String _formatValue(SystemObject obj) {
+      final props = obj.properties;
+      final dynamic value = props['value'] ?? props['default'];
+      if (value is num) return value.toString();
+      if (value is bool) return value ? 'ON' : 'OFF';
+      return value?.toString() ?? '-';
+    }
+
+    String _formatStatus(SystemObject obj) {
+      final status = obj.properties['status'] ?? 'Enabled';
+      return status.toString();
+    }
+
+    String _formatForce(SystemObject obj) {
+      final force = obj.properties['forceStatus'] ?? obj.properties['force'];
+      return (force ?? 'Not Forced').toString();
+    }
+
+    String _formatBinding(SystemObject obj) {
+      final props = obj.properties;
+      final hasBinding = props['bindingActive'] == true ||
+          props['writingFromBinding'] == true ||
+          props['valueFromBinding'] == true ||
+          props['binding'] != null;
+      return hasBinding ? 'Sí' : 'No';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(12.0),
+      child: Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ListTile(
+              title: Text('List View',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('Objetos contenidos en la carpeta'),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: rows.isEmpty
+                  ? const Center(
+                      child: Text('La carpeta no contiene objetos'),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 720),
+                        child: SingleChildScrollView(
+                          child: DataTable(
+                            columns: const [
+                              DataColumn(label: Text('Nombre')),
+                              DataColumn(label: Text('Descripción')),
+                              DataColumn(label: Text('Valor')),
+                              DataColumn(label: Text('Estado')),
+                              DataColumn(label: Text('Forzado')),
+                              DataColumn(label: Text('Bind')),
+                            ],
+                            rows: rows
+                                .map(
+                                  (child) => DataRow(cells: [
+                                    DataCell(Row(
+                                      children: [
+                                        _getIconForType(child.type),
+                                        const SizedBox(width: 6),
+                                        Text(child.name),
+                                      ],
+                                    )),
+                                    DataCell(Text(
+                                        child.properties['description']?.toString() ??
+                                            child.type)),
+                                    DataCell(Text(_formatValue(child))),
+                                    DataCell(Text(_formatStatus(child))),
+                                    DataCell(Text(_formatForce(child))),
+                                    DataCell(Text(_formatBinding(child))),
+                                  ]),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildPropertyGrid(SystemObject obj) {
@@ -1040,6 +1136,150 @@ class _MainShellState extends State<MainShell> {
       default:
         return Icon(Icons.insert_drive_file, size: size);
     }
+  }
+
+  bool _isGraphicTab(_EditorTab tab) {
+    final type = tab.object.type.toLowerCase();
+    return type == 'graphic' || type == 'screen';
+  }
+
+  Widget _buildRightSidebar(_EditorTab? currentTab) {
+    final isGraphic = currentTab != null && _isGraphicTab(currentTab);
+    final selectedObj = currentTab?.object ?? _selectedObject;
+
+    final content = selectedObj == null
+        ? const Center(child: Text('No selection'))
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  'Propiedades',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Expanded(child: _buildPropertyGrid(selectedObj)),
+              if (isGraphic)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Divider(height: 12),
+                      const Text(
+                        'Propiedades del widget',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 220,
+                        child: _buildGraphicWidgetProperties(),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+
+    final panel = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: _isRightPanelCollapsed ? 14 : 260,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: const Border(left: BorderSide(color: Color(0xFFC0C0C0))),
+        boxShadow: _isRightPanelCollapsed
+            ? null
+            : [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 6,
+                    offset: const Offset(-2, 0))
+              ],
+      ),
+      child: _isRightPanelCollapsed
+          ? InkWell(
+              onTap: () => setState(() => _isRightPanelCollapsed = false),
+              child: Center(
+                child: RotatedBox(
+                  quarterTurns: 2,
+                  child: Icon(Icons.chevron_left,
+                      color: Colors.grey.shade600, size: 16),
+                ),
+              ),
+            )
+          : Column(
+              children: [
+                Container(
+                  color: const Color(0xFFE0E0E0),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Row(
+                    children: [
+                      const Text('Panel derecho',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right, size: 18),
+                        tooltip: 'Minimizar',
+                        onPressed: () =>
+                            setState(() => _isRightPanelCollapsed = true),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: content,
+                  ),
+                ),
+              ],
+            ),
+    );
+
+    return panel;
+  }
+
+  Widget _buildGraphicWidgetProperties() {
+    final widget = _selectedGraphicWidget;
+    if (widget == null) {
+      return const Card(
+        child: Center(
+          child: Text('Selecciona un widget para ver sus propiedades'),
+        ),
+      );
+    }
+
+    final binding = widget.config['binding'];
+    final bindingLabel = binding is Map<String, dynamic>
+        ? (binding['valueName'] ?? binding['valueId']?.toString())
+        : null;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _getIconForType(widget.type, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(widget.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _propRow('Tipo', widget.type),
+            _propRow('Posición', 'x:${widget.x} • y:${widget.y}'),
+            _propRow('Tamaño', '${widget.width} x ${widget.height}'),
+            _propRow('Binding', bindingLabel ?? 'Sin binding'),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1728,10 +1968,12 @@ class ScriptEditorView extends StatelessWidget {
 class GraphicsEditorView extends StatefulWidget {
   final SystemObject systemObject;
   final List<SystemObject> availableValues;
+  final ValueChanged<GraphicWidget?>? onWidgetSelected;
   const GraphicsEditorView(
       {super.key,
       required this.systemObject,
-      required this.availableValues});
+      required this.availableValues,
+      this.onWidgetSelected});
 
   @override
   State<GraphicsEditorView> createState() => _GraphicsEditorViewState();
@@ -1786,6 +2028,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         _loadingWidgets = false;
         _error = null;
       });
+      widget.onWidgetSelected?.call(null);
       _loadScreenForTab();
     }
 
@@ -1911,40 +2154,21 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
 
       setState(() {
         _widgets = widgets;
-        _selectedWidget = widgets.isEmpty ? null : widgets.first;
-        _selectedWidgetType =
-            widgets.isEmpty ? null : _matchWidgetType(widgets.first.type);
-        _selectedBindingValue = widgets.isEmpty
-            ? null
-            : _matchBindingFromConfig(widgets.first.config);
-        if (widgets.isEmpty) {
-          _nameCtrl.clear();
-          _typeCtrl.clear();
-          _xCtrl.clear();
-          _yCtrl.clear();
-          _widthCtrl.clear();
-          _heightCtrl.clear();
-          _configCtrl.clear();
-        }
       });
-      if (widgets.isNotEmpty) {
-        _fillForm(widgets.first);
-      }
+      _setSelectedWidget(widgets.isEmpty ? null : widgets.first);
     } catch (e) {
       if (allowMock) {
         final mockWidgets = _buildMockWidgets(screenId);
         setState(() {
           _widgets = mockWidgets;
-          _selectedWidget = mockWidgets.isEmpty ? null : mockWidgets.first;
-          _selectedWidgetType = mockWidgets.isEmpty
-              ? null
-              : _matchWidgetType(mockWidgets.first.type);
-          _selectedBindingValue = mockWidgets.isEmpty
-              ? null
-              : _matchBindingFromConfig(mockWidgets.first.config);
           _error = 'No se pudieron cargar los widgets: $e. '
               'Se muestran datos de ejemplo.';
         });
+        _setSelectedWidget(mockWidgets.isEmpty ? null : mockWidgets.first,
+            updateForm: false);
+        if (mockWidgets.isNotEmpty) {
+          _fillForm(mockWidgets.first);
+        }
       } else {
         setState(() {
           _error = 'No se pudieron cargar los widgets: $e';
@@ -2098,6 +2322,34 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     _selectedBindingValue = _matchBindingFromConfig(widget.config);
     _configCtrl.text = const JsonEncoder.withIndent('  ').convert(widget.config);
     setState(() {});
+  }
+
+  void _clearForm() {
+    _nameCtrl.clear();
+    _typeCtrl.clear();
+    _xCtrl.clear();
+    _yCtrl.clear();
+    _widthCtrl.clear();
+    _heightCtrl.clear();
+    _configCtrl.clear();
+  }
+
+  void _setSelectedWidget(GraphicWidget? widget, {bool updateForm = true}) {
+    setState(() {
+      _selectedWidget = widget;
+      _selectedWidgetType = widget != null ? _matchWidgetType(widget.type) : null;
+      _selectedBindingValue =
+          widget != null ? _matchBindingFromConfig(widget.config) : null;
+      if (widget == null) {
+        _clearForm();
+      }
+    });
+
+    if (widget != null && updateForm) {
+      _fillForm(widget);
+    }
+
+    this.widget.onWidgetSelected?.call(widget);
   }
 
   Map<String, dynamic> _safeParseConfig(
@@ -2256,10 +2508,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                                     subtitle: Text(
                                         '${widget.type} • (${widget.x},${widget.y})'),
                                     onTap: () {
-                                      setState(() {
-                                        _selectedWidget = widget;
-                                      });
-                                      _fillForm(widget);
+                                      _setSelectedWidget(widget);
                                     },
                                   );
                                 },
@@ -2321,8 +2570,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       top: widget.y.toDouble(),
       child: GestureDetector(
         onTap: () {
-          setState(() => _selectedWidget = widget);
-          _fillForm(widget);
+          _setSelectedWidget(widget);
         },
         child: Container(
           width: widget.width.toDouble(),
