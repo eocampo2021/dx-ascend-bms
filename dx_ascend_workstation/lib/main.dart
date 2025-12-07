@@ -413,13 +413,13 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _showContextMenu(SystemObject node, Offset position) async {
     final actions = _getContextActions(node);
-    if (actions.isEmpty) return;
-
-    final selected = await showMenu<_CreateAction>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-          position.dx, position.dy, position.dx, position.dy),
-      items: actions
+    final entries = <PopupMenuEntry<dynamic>>[
+      PopupMenuItem(
+        value: 'rename',
+        child: const Text('Renombrar objeto'),
+      ),
+      if (actions.isNotEmpty) const PopupMenuDivider(),
+      ...actions
           .map(
             (action) => PopupMenuItem<_CreateAction>(
               value: action,
@@ -427,18 +427,34 @@ class _MainShellState extends State<MainShell> {
             ),
           )
           .toList(),
+    ];
+
+    final selected = await showMenu<dynamic>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          position.dx, position.dy, position.dx, position.dy),
+      items: entries,
     );
 
-    if (selected != null) {
+    if (selected == 'rename') {
+      _promptRename(node);
+    } else if (selected is _CreateAction) {
       await _createSystemObject(node, selected);
     }
   }
 
   Future<void> _createSystemObject(
       SystemObject parent, _CreateAction action) async {
+    final name = await _promptForName(
+      title: 'Nombre para ${action.label}',
+      initialValue: action.label,
+    );
+
+    if (name == null || name.trim().isEmpty) return;
+
     final payload = {
       'parent_id': parent.id,
-      'name': action.label,
+      'name': name.trim(),
       'type': action.type,
       'description': action.description,
       'properties': action.properties ?? <String, dynamic>{},
@@ -476,7 +492,7 @@ class _MainShellState extends State<MainShell> {
       final localObj = SystemObject(
         id: DateTime.now().millisecondsSinceEpoch,
         parentId: parent.id,
-        name: '${action.label} (local)',
+        name: '$name (local)',
         type: action.type,
         properties: action.properties ?? {},
       );
@@ -510,6 +526,101 @@ class _MainShellState extends State<MainShell> {
     return false;
   }
 
+  Future<void> _promptRename(SystemObject obj) async {
+    final newName = await _promptForName(
+      title: 'Renombrar "${obj.name}"',
+      initialValue: obj.name,
+    );
+
+    if (newName == null || newName.trim().isEmpty || newName == obj.name) {
+      return;
+    }
+
+    await _renameSystemObject(obj, newName.trim());
+  }
+
+  Future<String?> _promptForName({
+    required String title,
+    required String initialValue,
+  }) {
+    final controller = TextEditingController(text: initialValue);
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nombre',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (value) => Navigator.of(context).pop(value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(controller.text),
+              child: const Text('Aceptar'),
+            )
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _renameSystemObject(SystemObject obj, String newName) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$apiBaseUrl/system-objects/${obj.id}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': newName}),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Status ${response.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'No se pudo actualizar en el servidor ($e). El cambio es local.'),
+        ),
+      );
+    } finally {
+      setState(() {
+        _updateObjectNameInTree(obj.id, newName);
+      });
+    }
+  }
+
+  bool _updateObjectNameInTree(int id, String newName,
+      [List<SystemObject>? nodes]) {
+    final list = nodes ?? _treeData;
+    for (final node in list) {
+      if (node.id == id) {
+        node.name = newName;
+        if (_selectedObject?.id == id) {
+          _selectedObject = node;
+        }
+        for (var i = 0; i < _openTabs.length; i++) {
+          if (_openTabs[i].id == id) {
+            _openTabs[i].name = newName;
+          }
+        }
+        return true;
+      }
+      if (_updateObjectNameInTree(id, newName, node.children)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Widget _buildEditorContent(SystemObject obj) {
     final type = obj.type.toLowerCase();
     if (type == 'script' || type == 'program') {
@@ -521,10 +632,34 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildPropertyGrid(SystemObject obj) {
-    // Simulación de tabla de propiedades
+    final nameController = TextEditingController(text: obj.name);
     return ListView(
+      key: ValueKey(obj.id),
       children: [
-        _propRow("Name", obj.name),
+        const Text(
+          'Propiedades básicas',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Nombre',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) => _handlePropertyRename(obj, value),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.save, size: 16),
+            label: const Text('Guardar nombre'),
+            onPressed: () => _handlePropertyRename(obj, nameController.text),
+          ),
+        ),
+        const Divider(),
         _propRow("Type", obj.type),
         _propRow("ID", obj.id.toString()),
         _propRow("Description", "System Object Node"),
@@ -536,6 +671,18 @@ class _MainShellState extends State<MainShell> {
         _propRow("Log Level", "Information"),
       ],
     );
+  }
+
+  void _handlePropertyRename(SystemObject obj, String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El nombre no puede estar vacío.')),
+      );
+      return;
+    }
+    if (trimmed == obj.name) return;
+    _renameSystemObject(obj, trimmed);
   }
 
   Widget _propRow(String label, String value) {
@@ -771,7 +918,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
   @override
   void initState() {
     super.initState();
-    _loadScreens();
+    _loadScreenForTab();
   }
 
   @override
@@ -786,45 +933,40 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     super.dispose();
   }
 
-  Future<void> _loadScreens() async {
+  Future<void> _loadScreenForTab() async {
     setState(() {
       _loadingScreens = true;
       _error = null;
     });
     try {
-      final response = await http.get(Uri.parse('$apiBaseUrl/screens'));
-      if (response.statusCode != 200) {
-        throw Exception('Error al cargar pantallas (${response.statusCode})');
-      }
-      final List<dynamic> data = jsonDecode(response.body);
-      final screens = data.map((e) => Screen.fromJson(e)).toList();
-
       Screen? initial;
       final targetId = widget.systemObject.screenId;
       final targetRoute = widget.systemObject.screenRoute;
-      if (screens.isNotEmpty) {
-        if (targetId != null) {
-          try {
-            initial = screens.firstWhere((s) => s.id == targetId);
-          } catch (_) {
-            initial = null;
-          }
-        }
 
-        if (initial == null && targetRoute != null) {
-          try {
-            initial = screens.firstWhere((s) => s.route == targetRoute);
-          } catch (_) {
-            initial = null;
-          }
+      if (targetId != null) {
+        final response =
+            await http.get(Uri.parse('$apiBaseUrl/screens/$targetId'));
+        if (response.statusCode != 200) {
+          throw Exception(
+              'Error al cargar la pantalla (${response.statusCode})');
         }
-
-        initial ??= screens.first;
+        initial = Screen.fromJson(jsonDecode(response.body));
+      } else if (targetRoute != null) {
+        final response =
+            await http.get(Uri.parse('$apiBaseUrl/screens?route=$targetRoute'));
+        if (response.statusCode != 200) {
+          throw Exception(
+              'Error al cargar la pantalla (${response.statusCode})');
+        }
+        final data = jsonDecode(response.body);
+        if (data is List && data.isNotEmpty) {
+          initial = Screen.fromJson(data.first);
+        }
       }
 
       setState(() {
-        _screens = screens;
         _selectedScreen = initial;
+        _screens = initial != null ? [initial] : [];
         _loadingScreens = false;
       });
 
@@ -1041,30 +1183,25 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
           color: Colors.white,
           child: Row(
             children: [
-              const Text('Pantalla publicada:',
+              const Text('Pantalla:',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(width: 8),
-              DropdownButton<Screen>(
-                value: _selectedScreen,
-                hint: const Text('Selecciona una pantalla'),
-                items: _screens
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text('${s.name} (${s.route})'),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedScreen = value;
-                  });
-                  if (value != null) {
-                    _loadWidgets(value.id, allowMock: true);
-                  }
-                },
+              Expanded(
+                child: Text(
+                  _selectedScreen != null
+                      ? '${_selectedScreen!.name} (${_selectedScreen!.route})'
+                      : 'No se encontró la pantalla asociada',
+                  style: TextStyle(
+                    color: _selectedScreen != null
+                        ? Colors.black
+                        : Colors.red.shade700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 16),
               ElevatedButton.icon(
-                onPressed: _loadingScreens ? null : _loadScreens,
+                onPressed: _loadingScreens ? null : _loadScreenForTab,
                 icon: const Icon(Icons.refresh, size: 16),
                 label: const Text('Recargar'),
               ),
