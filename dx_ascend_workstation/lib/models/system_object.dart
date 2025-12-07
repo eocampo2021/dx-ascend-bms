@@ -3,7 +3,7 @@ import 'dart:convert';
 class SystemObject {
   final int id;
   final int? parentId;
-  final String name;
+  String name;
   final String type; // 'folder', 'server', 'program', 'screen'
   final Map<String, dynamic> properties; // JSON Map
   final String rawProperties;
