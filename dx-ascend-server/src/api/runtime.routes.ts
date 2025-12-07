@@ -66,8 +66,81 @@ const SCREEN_SQL = `
 `;
 
 // Construye el “runtime” de una pantalla por ID
+function loadValueObjectsMap(db: any) {
+  const rows = db
+    .prepare(
+      "SELECT id, name, type, properties FROM system_objects"
+    )
+    .all();
+
+  const values = new Map<number, any>();
+
+  for (const row of rows) {
+    const typeStr = (row.type ?? "").toString().toLowerCase();
+    if (!typeStr.includes("value")) continue;
+
+    let props: any = {};
+    try {
+      props = row.properties ? JSON.parse(row.properties) : {};
+    } catch {
+      props = {};
+    }
+
+    values.set(row.id as number, {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      properties: props,
+    });
+  }
+
+  return values;
+}
+
+function buildBindingFromConfig(config: any, valueMap: Map<number, any>) {
+  if (!config || typeof config !== "object") return null;
+
+  const rawBinding = (config as any).binding;
+  if (!rawBinding || typeof rawBinding !== "object") return null;
+
+  const rawId = rawBinding.valueId ?? rawBinding.targetId;
+  const targetId =
+    typeof rawId === "number"
+      ? rawId
+      : Number.isFinite(Number(rawId))
+      ? Number(rawId)
+      : null;
+
+  if (targetId == null) return null;
+
+  const target = valueMap.get(targetId);
+  const props = target?.properties ?? {};
+
+  let value: any = props.value ?? props.default ?? null;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    value = Number.isFinite(parsed) ? parsed : value;
+  }
+
+  const unit =
+    props.units ?? props.unit ?? props.unitText ?? props.unitsText ?? undefined;
+
+  return {
+    id: targetId,
+    mode: "read",
+    datapoint: {
+      id: targetId,
+      name: target?.name ?? rawBinding.valueName ?? `Value ${targetId}`,
+      unit,
+      datatype: props.kind ?? target?.type ?? "value",
+    },
+    value,
+  };
+}
+
 function buildRuntimeForScreenId(screenId: number) {
   const db = getDb();
+  const valueObjects = loadValueObjectsMap(db);
 
   const screen = db
     .prepare(
@@ -136,6 +209,13 @@ function buildRuntimeForScreenId(screenId: number) {
         datapoint: dp,
         value,
       });
+    }
+
+    if (w.bindings.length === 0) {
+      const configBinding = buildBindingFromConfig(w.config, valueObjects);
+      if (configBinding) {
+        w.bindings.push(configBinding);
+      }
     }
   }
 
