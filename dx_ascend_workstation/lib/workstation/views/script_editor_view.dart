@@ -104,22 +104,27 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
     _runtimeSubscription?.cancel();
     _runtimeSubscription = null;
 
-    if (widget.runtimeStatusStream == null) {
-      if (mounted) {
-        setState(() {
-          _runtimeStatus = const RuntimeStatus.idle();
-        });
-      } else {
-        _runtimeStatus = const RuntimeStatus.idle();
-      }
+    _updateRuntimeStatus(const RuntimeStatus.idle());
+
+    final stream = widget.runtimeStatusStream;
+    if (stream == null) return;
+
+    _runtimeSubscription = stream.listen(
+      _updateRuntimeStatus,
+      onError: (_) => _updateRuntimeStatus(const RuntimeStatus.idle()),
+      onDone: () => _updateRuntimeStatus(const RuntimeStatus.idle()),
+      cancelOnError: false,
+    );
+  }
+
+  void _updateRuntimeStatus(RuntimeStatus status) {
+    if (!mounted) {
+      _runtimeStatus = status;
       return;
     }
 
-    _runtimeSubscription = widget.runtimeStatusStream!.listen((status) {
-      if (!mounted) return;
-      setState(() {
-        _runtimeStatus = status;
-      });
+    setState(() {
+      _runtimeStatus = status;
     });
   }
 
