@@ -5,7 +5,9 @@ import '../models/graphic_widget.dart';
 import '../models/screen.dart';
 import '../models/system_object.dart';
 import 'api_config.dart';
+import 'models/binding_assignment.dart';
 import 'views/graphics_editor_view.dart';
+import 'views/bindings_editor_view.dart';
 import 'views/script_editor_view.dart';
 import 'widgets/value_properties_editor.dart';
 
@@ -53,19 +55,19 @@ class _MainShellState extends State<MainShell> {
       label: 'Nuevo valor digital',
       type: 'Digital Value',
       description: 'Punto digital para estados ON/OFF',
-      properties: {'kind': 'digital', 'default': false},
+      properties: const {'kind': 'digital', 'default': false},
     ),
     _CreateAction(
       label: 'Nuevo valor analógico',
       type: 'Analog Value',
       description: 'Punto analógico con valores numéricos',
-      properties: {'kind': 'analog', 'default': 0.0},
+      properties: const {'kind': 'analog', 'default': 0.0},
     ),
     _CreateAction(
       label: 'Nuevo valor de texto',
       type: 'String Value',
       description: 'Punto de texto para mensajes o etiquetas',
-      properties: {'kind': 'string', 'default': ''},
+      properties: const {'kind': 'string', 'default': ''},
     ),
   ];
 
