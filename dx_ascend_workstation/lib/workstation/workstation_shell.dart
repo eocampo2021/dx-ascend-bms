@@ -10,6 +10,8 @@ import 'views/graphics_editor_view.dart';
 import 'views/bindings_editor_view.dart';
 import 'views/script_editor_view.dart';
 import 'widgets/value_properties_editor.dart';
+import 'widgets/ebo_ribbon_bar.dart';
+import 'widgets/panel_header.dart';
 
 // ---------------------------------------------------------------------------
 // ESTRUCTURA PRINCIPAL (SHELL)
