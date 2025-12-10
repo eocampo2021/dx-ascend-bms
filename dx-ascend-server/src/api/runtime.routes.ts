@@ -233,6 +233,43 @@ function buildRuntimeForScreenId(screenId: number) {
   return runtime;
 }
 
+function extractProgramCode(rawProps: any): string {
+  if (!rawProps || typeof rawProps !== "object") return "";
+
+  const candidates = ["code", "script", "source", "plainEnglish"];
+  for (const key of candidates) {
+    const value = (rawProps as any)[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function validateProgramCode(code: string): string[] {
+  const errors: string[] = [];
+
+  if (!code || code.trim().length === 0) {
+    errors.push("El programa no tiene código");
+  }
+
+  if (!/\bEnd\b/i.test(code)) {
+    errors.push('Falta la sentencia "End"');
+  }
+
+  const lines = code.split("\n");
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (trimmed.includes("..")) {
+      errors.push(`Posible error de sintaxis en la línea ${idx + 1}`);
+    }
+  });
+
+  return errors;
+}
+
 // ---------- Endpoints ----------
 
 // Listado simple de pantallas disponibles para runtime
@@ -397,5 +434,57 @@ function findScreenByRouteOrName(db: any, routeRaw: string) {
 
   return null;
 }
+
+router.get("/runtime-status", (_req: Request, res: Response) => {
+  const db = getDb();
+
+  try {
+    const rows = db
+      .prepare(
+        "SELECT id, name, type, properties FROM system_objects WHERE LOWER(type) IN ('program', 'script') ORDER BY name"
+      )
+      .all();
+
+    const programStatuses = rows.map((row: any) => {
+      let props: any = {};
+      try {
+        props = row.properties ? JSON.parse(row.properties) : {};
+      } catch {
+        props = {};
+      }
+
+      const code = extractProgramCode(props);
+      const errors = validateProgramCode(code);
+
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        isRunning: errors.length === 0,
+        errors,
+      };
+    });
+
+    const faultyPrograms = programStatuses.filter((p: any) => p.errors.length > 0);
+    const firstError = faultyPrograms
+      .map((p: any) => `${p.name}: ${p.errors.join(" · ")}`)
+      .shift();
+
+    res.json({
+      isRunning: faultyPrograms.length === 0,
+      running: faultyPrograms.length === 0,
+      programStatuses,
+      error: firstError ?? null,
+      timestamp: Date.now(),
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      isRunning: false,
+      running: false,
+      error: error?.message ?? "No se pudo obtener el estado de los programas",
+      programStatuses: [],
+    });
+  }
+});
 
 export default router;

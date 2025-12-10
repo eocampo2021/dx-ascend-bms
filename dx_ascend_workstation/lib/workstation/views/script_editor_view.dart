@@ -10,16 +10,58 @@ class RuntimeStatus {
     required this.isRunning,
     this.currentLine,
     this.currentTimestamp,
+    this.errorMessage,
+    this.programs = const [],
   });
 
   const RuntimeStatus.idle()
       : isRunning = false,
         currentLine = null,
-        currentTimestamp = null;
+        currentTimestamp = null,
+        errorMessage = null,
+        programs = const [];
 
   final bool isRunning;
   final int? currentLine;
   final int? currentTimestamp;
+  final String? errorMessage;
+  final List<ProgramRuntimeStatus> programs;
+}
+
+class ProgramRuntimeStatus {
+  const ProgramRuntimeStatus({
+    required this.id,
+    required this.name,
+    required this.isRunning,
+    this.type,
+    this.errors = const [],
+  });
+
+  final int id;
+  final String name;
+  final String? type;
+  final bool isRunning;
+  final List<String> errors;
+
+  bool get hasErrors => errors.isNotEmpty;
+
+  factory ProgramRuntimeStatus.fromJson(Map<String, dynamic> json) {
+    List<String> parsedErrors = const [];
+    final rawErrors = json['errors'];
+    if (rawErrors is List) {
+      parsedErrors = rawErrors.whereType<String>().toList();
+    } else if (rawErrors is String && rawErrors.isNotEmpty) {
+      parsedErrors = [rawErrors];
+    }
+
+    return ProgramRuntimeStatus(
+      id: json['id'] is int ? json['id'] as int : int.tryParse('${json['id']}') ?? 0,
+      name: json['name']?.toString() ?? 'Program',
+      type: json['type']?.toString(),
+      isRunning: json['isRunning'] == true || json['running'] == true,
+      errors: parsedErrors,
+    );
+  }
 }
 
 class ScriptEditorView extends StatefulWidget {
@@ -479,43 +521,138 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
   }
 
   Widget _buildRuntimeStatus() {
-    final isRunning = _runtimeStatus.isRunning;
-    final icon = isRunning ? Icons.play_circle_fill : Icons.stop_circle_outlined;
-    final color = isRunning ? Colors.blueAccent : Colors.grey;
-    final stateLabel = isRunning ? 'Running' : 'Idle';
-    final lineLabel =
-        _runtimeStatus.currentLine != null ? '${_runtimeStatus.currentLine}' : 'Sin datos';
+    final programs = _runtimeStatus.programs;
+    final programsWithErrors = programs.where((p) => p.hasErrors).toList();
+    final hasConnectionIssue =
+        (_runtimeStatus.errorMessage ?? '').trim().isNotEmpty && programs.isEmpty;
+    final isRunning = _runtimeStatus.isRunning && programsWithErrors.isEmpty;
+    final icon = hasConnectionIssue
+        ? Icons.cloud_off
+        : programsWithErrors.isNotEmpty
+            ? Icons.error_outline
+            : isRunning
+                ? Icons.play_circle_fill
+                : Icons.stop_circle_outlined;
+    final color = hasConnectionIssue
+        ? Colors.red
+        : programsWithErrors.isNotEmpty
+            ? Colors.orange
+            : isRunning
+                ? Colors.blueAccent
+                : Colors.grey;
+    final stateLabel = hasConnectionIssue
+        ? 'Sin conexión'
+        : programsWithErrors.isNotEmpty
+            ? '${programsWithErrors.length} programas con errores'
+            : isRunning
+                ? 'Programas corriendo'
+                : 'Programas detenidos';
+    final lineLabel = _runtimeStatus.currentLine != null
+        ? 'Línea ${_runtimeStatus.currentLine}'
+        : 'Línea sin datos';
     final tsLabel = _runtimeStatus.currentTimestamp != null
-        ? '${_runtimeStatus.currentTimestamp}'
-        : 'Sin datos';
+        ? 'TS ${_runtimeStatus.currentTimestamp}'
+        : 'TS sin datos';
+    final subtitle = hasConnectionIssue
+        ? _runtimeStatus.errorMessage ?? 'No se pudo consultar el estado'
+        : programsWithErrors.isNotEmpty
+            ? programsWithErrors
+                .map((p) => '${p.name}: ${p.errors.first}')
+                .join(' · ')
+            : '$lineLabel · $tsLabel';
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              stateLabel,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
+    return InkWell(
+      onTap: () => _showProgramStatusDialog(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                stateLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Línea $lineLabel · TS $tsLabel',
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.black54,
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.black54,
+                ),
               ),
-            ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showProgramStatusDialog() {
+    final programs = _runtimeStatus.programs;
+    final errorMessage = _runtimeStatus.errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Estado de programas'),
+          content: SizedBox(
+            width: 480,
+            child: programs.isEmpty
+                ? Text(errorMessage ?? 'No hay programas registrados en el árbol')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: programs.length,
+                    separatorBuilder: (_, __) => const Divider(height: 8),
+                    itemBuilder: (_, index) {
+                      final program = programs[index];
+                      final hasErrors = program.hasErrors;
+                      final icon = hasErrors
+                          ? Icons.error_outline
+                          : (program.isRunning
+                              ? Icons.check_circle_outline
+                              : Icons.pause_circle_outline);
+                      final color = hasErrors
+                          ? Colors.red
+                          : (program.isRunning ? Colors.green : Colors.grey);
+
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(icon, color: color),
+                        title: Text(program.name),
+                        subtitle: hasErrors
+                            ? Text(program.errors.join(' · '))
+                            : const Text('Listo para ejecución'),
+                        trailing: hasErrors
+                            ? const Chip(
+                                label: Text('Error',
+                                    style: TextStyle(color: Colors.white)),
+                                backgroundColor: Colors.red,
+                              )
+                            : const Chip(
+                                label: Text('OK'),
+                                backgroundColor: Color(0xFFE0F2F1),
+                              ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cerrar'),
+            )
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 }

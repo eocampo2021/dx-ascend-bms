@@ -144,7 +144,8 @@ class _MainShellState extends State<MainShell> {
     _isFetchingRuntimeStatus = true;
 
     try {
-      final response = await http.get(Uri.parse('$apiBaseUrl/runtime-status'));
+      final response =
+          await http.get(Uri.parse('$apiBaseUrl/runtime/runtime-status'));
       if (response.statusCode != 200) return;
 
       final data = json.decode(response.body);
@@ -155,10 +156,22 @@ class _MainShellState extends State<MainShell> {
           isRunning: data['isRunning'] == true || data['running'] == true,
           currentLine: _parseIntValue(data['line']),
           currentTimestamp: _parseIntValue(data['timestamp']),
+          errorMessage: data['error']?.toString(),
+          programs: _parseProgramStatuses(
+            data['programStatuses'] ?? data['programs'],
+          ),
         ),
       );
     } catch (_) {
-      _runtimeStatusController.add(const RuntimeStatus.idle());
+      _runtimeStatusController.add(
+        const RuntimeStatus(
+          isRunning: false,
+          currentLine: null,
+          currentTimestamp: null,
+          errorMessage: 'No se pudo consultar el estado de los programas',
+          programs: [],
+        ),
+      );
     } finally {
       _isFetchingRuntimeStatus = false;
     }
@@ -168,6 +181,15 @@ class _MainShellState extends State<MainShell> {
     if (value is int) return value;
     if (value is String) return int.tryParse(value);
     return null;
+  }
+
+  List<ProgramRuntimeStatus> _parseProgramStatuses(dynamic value) {
+    if (value is! List) return const [];
+
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map(ProgramRuntimeStatus.fromJson)
+        .toList();
   }
 
   List<SystemObject> _buildTree(List<SystemObject> flatList) {
