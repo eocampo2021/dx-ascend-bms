@@ -5,6 +5,23 @@ import 'package:flutter/material.dart';
 import '../../models/system_object.dart';
 import '../models/binding_assignment.dart';
 
+class RuntimeStatus {
+  const RuntimeStatus({
+    required this.isRunning,
+    this.currentLine,
+    this.currentTimestamp,
+  });
+
+  const RuntimeStatus.idle()
+      : isRunning = false,
+        currentLine = null,
+        currentTimestamp = null;
+
+  final bool isRunning;
+  final int? currentLine;
+  final int? currentTimestamp;
+}
+
 class ScriptEditorView extends StatefulWidget {
   const ScriptEditorView({
     super.key,
@@ -14,6 +31,7 @@ class ScriptEditorView extends StatefulWidget {
     this.onSave,
     this.onCodeChanged,
     this.onBindingsChanged,
+    this.runtimeStatusStream,
   });
 
   final SystemObject systemObject;
@@ -27,6 +45,7 @@ class ScriptEditorView extends StatefulWidget {
       onSave;
   final ValueChanged<String>? onCodeChanged;
   final ValueChanged<List<BindingAssignment>>? onBindingsChanged;
+  final Stream<RuntimeStatus>? runtimeStatusStream;
 
   @override
   State<ScriptEditorView> createState() => _ScriptEditorViewState();
@@ -38,12 +57,14 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
   final ScrollController _scrollController = ScrollController();
   final List<BindingAssignment> _bindings = [];
   List<_PlainEnglishVariable> _ioVariables = const [];
+  StreamSubscription<RuntimeStatus>? _runtimeSubscription;
 
   bool _isValid = true;
   bool _isLoading = false;
   bool _isSaving = false;
   String _statusMessage = 'Compilación OK';
   String _cursorLabel = 'Línea 1, Col 1';
+  RuntimeStatus _runtimeStatus = const RuntimeStatus.idle();
 
   @override
   void initState() {
@@ -51,6 +72,7 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
     _controller = PlainEnglishEditingController();
     _controller.addListener(_onCodeChanged);
     _bindings.addAll(_loadExistingBindings());
+    _listenRuntimeStatus();
     _loadScript();
   }
 
@@ -63,6 +85,9 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
         ..addAll(_loadExistingBindings());
       _loadScript();
     }
+    if (oldWidget.runtimeStatusStream != widget.runtimeStatusStream) {
+      _listenRuntimeStatus();
+    }
   }
 
   @override
@@ -71,7 +96,31 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
     _controller.dispose();
     _focusNode.dispose();
     _scrollController.dispose();
+    _runtimeSubscription?.cancel();
     super.dispose();
+  }
+
+  void _listenRuntimeStatus() {
+    _runtimeSubscription?.cancel();
+    _runtimeSubscription = null;
+
+    if (widget.runtimeStatusStream == null) {
+      if (mounted) {
+        setState(() {
+          _runtimeStatus = const RuntimeStatus.idle();
+        });
+      } else {
+        _runtimeStatus = const RuntimeStatus.idle();
+      }
+      return;
+    }
+
+    _runtimeSubscription = widget.runtimeStatusStream!.listen((status) {
+      if (!mounted) return;
+      setState(() {
+        _runtimeStatus = status;
+      });
+    });
   }
 
   Future<void> _loadScript() async {
@@ -314,6 +363,9 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
+              Flexible(child: _buildRuntimeStatus()),
+              const SizedBox(width: 12),
               Text(
                 _cursorLabel,
                 style: const TextStyle(color: Colors.black54, fontSize: 12),
@@ -419,6 +471,47 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
       _bindings[index].target = value;
       widget.onBindingsChanged?.call(_bindings);
     });
+  }
+
+  Widget _buildRuntimeStatus() {
+    final isRunning = _runtimeStatus.isRunning;
+    final icon = isRunning ? Icons.play_circle_fill : Icons.stop_circle_outlined;
+    final color = isRunning ? Colors.blueAccent : Colors.grey;
+    final stateLabel = isRunning ? 'Running' : 'Idle';
+    final lineLabel =
+        _runtimeStatus.currentLine != null ? '${_runtimeStatus.currentLine}' : 'Sin datos';
+    final tsLabel = _runtimeStatus.currentTimestamp != null
+        ? '${_runtimeStatus.currentTimestamp}'
+        : 'Sin datos';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              stateLabel,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Línea $lineLabel · TS $tsLabel',
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
