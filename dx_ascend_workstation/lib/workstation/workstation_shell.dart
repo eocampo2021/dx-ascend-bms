@@ -847,10 +847,14 @@ class _MainShellState extends State<MainShell> {
     await _saveObjectProperties(obj, updatedProps, 'Bindings actualizados');
   }
 
-  Future<void> _saveScriptSource(SystemObject obj, String code) async {
+  Future<void> _saveScriptSource(
+      SystemObject obj, String code, List<BindingAssignment> bindings) async {
+    final bindingJson = bindings.map((binding) => binding.toJson()).toList();
+
     final Map<String, dynamic> updatedProps = {
       ...obj.properties,
       'code': code,
+      'bindings': bindingJson,
     };
 
     await _saveObjectProperties(obj, updatedProps, 'Script guardado');
@@ -923,8 +927,12 @@ class _MainShellState extends State<MainShell> {
       return ScriptEditorView(
         key: ValueKey('script-${obj.id}'),
         systemObject: obj,
-        onSave: (object, code) => _saveScriptSource(object, code),
+        availableValues: _collectValueObjects(),
+        onSave: (object, code, bindings) =>
+            _saveScriptSource(object, code, bindings),
         onCodeChanged: (code) => obj.properties['code'] = code,
+        onBindingsChanged: (bindings) =>
+            obj.properties['bindings'] = bindings.map((b) => b.toJson()).toList(),
       );
     } else if (type == 'graphic' || type == 'screen') {
       return GraphicsEditorView(

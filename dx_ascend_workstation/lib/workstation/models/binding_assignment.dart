@@ -5,10 +5,12 @@ class BindingAssignment {
   BindingAssignment({
     this.target,
     this.slot = '',
+    this.direction,
   });
 
   SystemObject? target;
   String slot;
+  String? direction;
 
   factory BindingAssignment.fromJson(
     Map<String, dynamic> json,
@@ -29,6 +31,7 @@ class BindingAssignment {
     return BindingAssignment(
       target: target,
       slot: (json['slot'] ?? '').toString(),
+      direction: (json['direction'] ?? json['mode'])?.toString(),
     );
   }
 
@@ -37,6 +40,7 @@ class BindingAssignment {
       'target_id': target?.id,
       'slot': slot,
       'valueName': target?.name,
+      if (direction != null) 'direction': direction,
     };
   }
 }
