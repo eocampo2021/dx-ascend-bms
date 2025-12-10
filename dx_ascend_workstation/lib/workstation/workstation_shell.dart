@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -27,6 +28,10 @@ class _MainShellState extends State<MainShell> {
   // Estado del Árbol
   List<SystemObject> _treeData = [];
   bool _isLoading = true;
+  final StreamController<RuntimeStatus> _runtimeStatusController =
+      StreamController<RuntimeStatus>.broadcast();
+  Timer? _runtimeStatusTimer;
+  bool _isFetchingRuntimeStatus = false;
 
   /// Opciones base disponibles en los menús contextuales del árbol
   static const List<_CreateAction> _baseCreateActions = [
@@ -89,7 +94,15 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    _initializeRuntimeStatusStream();
     _fetchSystemTree();
+  }
+
+  @override
+  void dispose() {
+    _runtimeStatusTimer?.cancel();
+    _runtimeStatusController.close();
+    super.dispose();
   }
 
   /// Obtiene los datos del backend y los organiza en árbol
@@ -117,6 +130,44 @@ class _MainShellState extends State<MainShell> {
         _isLoading = false;
       });
     }
+  }
+
+  void _initializeRuntimeStatusStream() {
+    _runtimeStatusController.add(const RuntimeStatus.idle());
+    _runtimeStatusTimer?.cancel();
+    _runtimeStatusTimer =
+        Timer.periodic(const Duration(seconds: 3), (_) => _pollRuntimeStatus());
+  }
+
+  Future<void> _pollRuntimeStatus() async {
+    if (_isFetchingRuntimeStatus) return;
+    _isFetchingRuntimeStatus = true;
+
+    try {
+      final response = await http.get(Uri.parse('$apiBaseUrl/runtime-status'));
+      if (response.statusCode != 200) return;
+
+      final data = json.decode(response.body);
+      if (data is! Map<String, dynamic>) return;
+
+      _runtimeStatusController.add(
+        RuntimeStatus(
+          isRunning: data['isRunning'] == true || data['running'] == true,
+          currentLine: _parseIntValue(data['line']),
+          currentTimestamp: _parseIntValue(data['timestamp']),
+        ),
+      );
+    } catch (_) {
+      _runtimeStatusController.add(const RuntimeStatus.idle());
+    } finally {
+      _isFetchingRuntimeStatus = false;
+    }
+  }
+
+  int? _parseIntValue(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   List<SystemObject> _buildTree(List<SystemObject> flatList) {
@@ -933,6 +984,7 @@ class _MainShellState extends State<MainShell> {
         onCodeChanged: (code) => obj.properties['code'] = code,
         onBindingsChanged: (bindings) =>
             obj.properties['bindings'] = bindings.map((b) => b.toJson()).toList(),
+        runtimeStatusStream: _runtimeStatusController.stream,
       );
     } else if (type == 'graphic' || type == 'screen') {
       return GraphicsEditorView(
