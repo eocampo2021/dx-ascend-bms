@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -11,11 +12,13 @@ class GraphicsEditorView extends StatefulWidget {
   final SystemObject systemObject;
   final List<SystemObject> availableValues;
   final ValueChanged<GraphicWidget?>? onWidgetSelected;
+  final ValueChanged<Widget?>? onWidgetEditorChanged;
   const GraphicsEditorView(
       {super.key,
       required this.systemObject,
       required this.availableValues,
-      this.onWidgetSelected});
+      this.onWidgetSelected,
+      this.onWidgetEditorChanged});
 
   @override
   State<GraphicsEditorView> createState() => _GraphicsEditorViewState();
@@ -93,6 +96,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     _widthCtrl.dispose();
     _heightCtrl.dispose();
     _configCtrl.dispose();
+    widget.onWidgetEditorChanged?.call(null);
     super.dispose();
   }
 
@@ -399,6 +403,14 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     _configCtrl.clear();
   }
 
+  void _notifyWidgetEditorChange() {
+    if (widget.onWidgetEditorChanged == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onWidgetEditorChanged!(_buildWidgetEditor());
+    });
+  }
+
   void _setSelectedWidget(GraphicWidget? widget, {bool updateForm = true}) {
     setState(() {
       _selectedWidget = widget;
@@ -415,6 +427,27 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     }
 
     this.widget.onWidgetSelected?.call(widget);
+    _notifyWidgetEditorChange();
+  }
+
+  void _updateWidgetPosition(GraphicWidget widget, Offset delta) {
+    final newX = max(0, widget.x + delta.dx.round());
+    final newY = max(0, widget.y + delta.dy.round());
+    final updated = widget.copyWith(x: newX, y: newY);
+
+    setState(() {
+      final index = _widgets.indexWhere((element) => element.id == widget.id);
+      if (index != -1) {
+        _widgets[index] = updated;
+      }
+      if (_selectedWidget?.id == widget.id) {
+        _selectedWidget = updated;
+        _xCtrl.text = updated.x.toString();
+        _yCtrl.text = updated.y.toString();
+      }
+    });
+
+    _notifyWidgetEditorChange();
   }
 
   Map<String, dynamic> _safeParseConfig(
@@ -607,8 +640,6 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                   ),
                 ),
               ),
-              const VerticalDivider(width: 1),
-              SizedBox(width: 360, child: _buildWidgetEditor()),
             ],
           ),
         )
@@ -631,6 +662,10 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
       child: GestureDetector(
         onTap: () {
           _setSelectedWidget(widget);
+        },
+        onPanStart: (_) => _setSelectedWidget(widget),
+        onPanUpdate: (details) {
+          _updateWidgetPosition(widget, details.delta);
         },
         child: Container(
           width: widget.width.toDouble(),

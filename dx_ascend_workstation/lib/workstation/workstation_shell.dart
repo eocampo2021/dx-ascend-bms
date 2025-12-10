@@ -80,6 +80,7 @@ class _MainShellState extends State<MainShell> {
   // Estado del panel derecho y selección de widget en el editor gráfico
   bool _isRightPanelCollapsed = false;
   GraphicWidget? _selectedGraphicWidget;
+  Widget? _widgetEditorPanel;
 
   // Objeto seleccionado actualmente (para el panel de propiedades)
   SystemObject? _selectedObject;
@@ -192,6 +193,7 @@ class _MainShellState extends State<MainShell> {
         _selectedTabIndex = _openTabs.length - 1;
         _selectedObject = obj;
         _selectedGraphicWidget = null;
+        _widgetEditorPanel = null;
         _selectedListObjectId = null;
       });
     } else {
@@ -200,6 +202,7 @@ class _MainShellState extends State<MainShell> {
         _selectedObject = obj;
         if (!_isGraphicTab(_openTabs[index])) {
           _selectedGraphicWidget = null;
+          _widgetEditorPanel = null;
         }
         _selectedListObjectId = null;
       });
@@ -216,6 +219,12 @@ class _MainShellState extends State<MainShell> {
   void _onWidgetSelected(GraphicWidget? widget) {
     setState(() {
       _selectedGraphicWidget = widget;
+    });
+  }
+
+  void _onWidgetEditorChanged(Widget? editor) {
+    setState(() {
+      _widgetEditorPanel = editor;
     });
   }
 
@@ -279,6 +288,7 @@ class _MainShellState extends State<MainShell> {
                                 _selectedTabIndex = index;
                                 if (!_isGraphicTab(tab)) {
                                   _selectedGraphicWidget = null;
+                                  _widgetEditorPanel = null;
                                 }
                               }),
                               child: Container(
@@ -908,6 +918,7 @@ class _MainShellState extends State<MainShell> {
         systemObject: obj,
         availableValues: _collectValueObjects(),
         onWidgetSelected: _onWidgetSelected,
+        onWidgetEditorChanged: _onWidgetEditorChanged,
       );
     }
     return Center(child: Text("Generic Editor for ${obj.name}"));
@@ -1129,38 +1140,68 @@ class _MainShellState extends State<MainShell> {
     final isGraphic = currentTab != null && _isGraphicTab(currentTab);
     final selectedObj = _selectedObject ?? currentTab?.object;
 
+    Widget buildPropertiesSection() {
+      if (selectedObj == null) {
+        return const Expanded(child: SizedBox.shrink());
+      }
+      return Expanded(
+        flex: isGraphic ? 1 : 2,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'Propiedades',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(child: _buildPropertyGrid(selectedObj)),
+          ],
+        ),
+      );
+    }
+
+    Widget buildWidgetEditorSection() {
+      if (!isGraphic) return const SizedBox.shrink();
+      return Expanded(
+        flex: 2,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'Propiedades del widget',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: _widgetEditorPanel ??
+                  Card(
+                    child: Center(
+                      child: Text(
+                        _selectedGraphicWidget == null
+                            ? 'Selecciona un widget para ver y editar sus propiedades'
+                            : 'Cargando editor...',
+                      ),
+                    ),
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final content = selectedObj == null
         ? const Center(child: Text('No selection'))
         : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  'Propiedades',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              Expanded(child: _buildPropertyGrid(selectedObj)),
-              if (isGraphic)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Divider(height: 12),
-                      const Text(
-                        'Propiedades del widget',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 220,
-                        child: _buildGraphicWidgetProperties(),
-                      ),
-                    ],
-                  ),
-                ),
+              buildPropertiesSection(),
+              if (isGraphic) const SizedBox(height: 8),
+              if (isGraphic) buildWidgetEditorSection(),
             ],
           );
 
@@ -1222,47 +1263,6 @@ class _MainShellState extends State<MainShell> {
     return panel;
   }
 
-  Widget _buildGraphicWidgetProperties() {
-    final widget = _selectedGraphicWidget;
-    if (widget == null) {
-      return const Card(
-        child: Center(
-          child: Text('Selecciona un widget para ver sus propiedades'),
-        ),
-      );
-    }
-
-    final binding = widget.config['binding'];
-    final bindingLabel = binding is Map<String, dynamic>
-        ? (binding['valueName'] ?? binding['valueId']?.toString())
-        : null;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _getIconForType(widget.type, size: 18),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(widget.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _propRow('Tipo', widget.type),
-            _propRow('Posición', 'x:${widget.x} • y:${widget.y}'),
-            _propRow('Tamaño', '${widget.width} x ${widget.height}'),
-            _propRow('Binding', bindingLabel ?? 'Sin binding'),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _CreateAction {
