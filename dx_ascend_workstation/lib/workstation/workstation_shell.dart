@@ -847,6 +847,15 @@ class _MainShellState extends State<MainShell> {
     await _saveObjectProperties(obj, updatedProps, 'Bindings actualizados');
   }
 
+  Future<void> _saveScriptSource(SystemObject obj, String code) async {
+    final Map<String, dynamic> updatedProps = {
+      ...obj.properties,
+      'code': code,
+    };
+
+    await _saveObjectProperties(obj, updatedProps, 'Script guardado');
+  }
+
   bool _applyPropertiesToTree(int id, Map<String, dynamic> properties,
       [List<SystemObject>? nodes]) {
     final list = nodes ?? _treeData;
@@ -911,7 +920,12 @@ class _MainShellState extends State<MainShell> {
       return _buildFolderListView(obj);
     }
     if (type == 'script' || type == 'program') {
-      return const ScriptEditorView();
+      return ScriptEditorView(
+        key: ValueKey('script-${obj.id}'),
+        systemObject: obj,
+        onSave: (object, code) => _saveScriptSource(object, code),
+        onCodeChanged: (code) => obj.properties['code'] = code,
+      );
     } else if (type == 'graphic' || type == 'screen') {
       return GraphicsEditorView(
         key: ValueKey('graphic-${obj.id}'),
