@@ -367,10 +367,25 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
                         focusNode: _focusNode,
                         scrollController: _scrollController,
                         maxLines: null,
+                        minLines: 12,
                         keyboardType: TextInputType.multiline,
-                        decoration: const InputDecoration(
-                          isCollapsed: true,
-                          border: InputBorder.none,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 12,
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.grey.shade300,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Colors.blue.shade200,
+                            ),
+                          ),
                         ),
                         style: baseStyle,
                       ),
