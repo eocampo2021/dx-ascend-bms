@@ -18,7 +18,7 @@ class EboRibbonBar extends StatelessWidget {
           Icon(Icons.dashboard_customize, size: 24),
           SizedBox(width: 12),
           Text(
-            'EcoStruxure Building Operation',
+            'DX-Ascend-Workstation',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ],
