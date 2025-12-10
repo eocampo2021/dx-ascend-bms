@@ -3,20 +3,30 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/system_object.dart';
+import '../models/binding_assignment.dart';
 
 class ScriptEditorView extends StatefulWidget {
   const ScriptEditorView({
     super.key,
     required this.systemObject,
+    required this.availableValues,
     this.onLoad,
     this.onSave,
     this.onCodeChanged,
+    this.onBindingsChanged,
   });
 
   final SystemObject systemObject;
+  final List<SystemObject> availableValues;
   final Future<String?> Function(SystemObject object)? onLoad;
-  final Future<void> Function(SystemObject object, String code)? onSave;
+  final Future<void> Function(
+    SystemObject object,
+    String code,
+    List<BindingAssignment> bindings,
+  )?
+      onSave;
   final ValueChanged<String>? onCodeChanged;
+  final ValueChanged<List<BindingAssignment>>? onBindingsChanged;
 
   @override
   State<ScriptEditorView> createState() => _ScriptEditorViewState();
@@ -26,6 +36,8 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
   late final PlainEnglishEditingController _controller;
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  final List<BindingAssignment> _bindings = [];
+  List<_PlainEnglishVariable> _ioVariables = const [];
 
   bool _isValid = true;
   bool _isLoading = false;
@@ -38,6 +50,7 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
     super.initState();
     _controller = PlainEnglishEditingController();
     _controller.addListener(_onCodeChanged);
+    _bindings.addAll(_loadExistingBindings());
     _loadScript();
   }
 
@@ -45,6 +58,9 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
   void didUpdateWidget(covariant ScriptEditorView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.systemObject.id != widget.systemObject.id) {
+      _bindings
+        ..clear()
+        ..addAll(_loadExistingBindings());
       _loadScript();
     }
   }
@@ -64,6 +80,10 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
       _statusMessage = 'Cargando script...';
     });
 
+    _bindings
+      ..clear()
+      ..addAll(_loadExistingBindings());
+
     String code = _extractCodeFromProperties();
 
     if (widget.onLoad != null) {
@@ -79,6 +99,7 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
 
     _controller.text = code;
     _runValidation();
+    _syncBindingsWithCode();
 
     setState(() {
       _isLoading = false;
@@ -100,6 +121,7 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
 
   void _onCodeChanged() {
     widget.onCodeChanged?.call(_controller.text);
+    _syncBindingsWithCode();
     _updateCursorLabel();
     // Validación rápida en segundo plano
     _runValidation(silent: true);
@@ -118,6 +140,76 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
     setState(() {
       _cursorLabel = 'Línea $line, Col $column';
     });
+  }
+
+  List<BindingAssignment> _loadExistingBindings() {
+    final raw = widget.systemObject.properties['bindings'];
+    if (raw is List) {
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map((json) => BindingAssignment.fromJson(json, widget.availableValues))
+          .toList();
+    }
+    return <BindingAssignment>[];
+  }
+
+  void _syncBindingsWithCode() {
+    final detected = _parsePlainEnglishVariables(_controller.text);
+
+    final normalizedExisting = <String, BindingAssignment>{};
+    for (final binding in _bindings) {
+      normalizedExisting[binding.slot.toLowerCase()] = binding;
+    }
+
+    final List<BindingAssignment> updated = [];
+    for (final variable in detected) {
+      final existing = normalizedExisting.remove(variable.name.toLowerCase());
+      updated.add(
+        BindingAssignment(
+          slot: variable.name,
+          direction: variable.kind,
+          target: existing?.target,
+        ),
+      );
+    }
+
+    // Preservamos bindings que no están vinculados a Input/Output declarados
+    updated.addAll(normalizedExisting.values);
+
+    setState(() {
+      _ioVariables = detected;
+
+      _bindings
+        ..clear()
+        ..addAll(updated);
+    });
+
+    widget.onBindingsChanged?.call(_bindings);
+  }
+
+  List<_PlainEnglishVariable> _parsePlainEnglishVariables(String code) {
+    final regex = RegExp(
+      r'^\s*(?:Numeric|String|Boolean)?\s*(Input|Output)\s+([A-Za-z_][A-Za-z0-9_]*)',
+      multiLine: true,
+      caseSensitive: false,
+    );
+
+    final seen = <String>{};
+    final variables = <_PlainEnglishVariable>[];
+
+    for (final match in regex.allMatches(code)) {
+      final kind = match.group(1)?.toLowerCase();
+      final name = match.group(2) ?? '';
+      if (name.isEmpty) continue;
+
+      final normalized = name.toLowerCase();
+      if (seen.contains(normalized)) continue;
+
+      seen.add(normalized);
+      variables.add(_PlainEnglishVariable(name: name, kind: kind));
+    }
+
+    return variables;
   }
 
   void _runValidation({bool silent = false}) {
@@ -156,10 +248,12 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
     });
 
     widget.systemObject.properties['code'] = code;
+    widget.systemObject.properties['bindings'] =
+        _bindings.map((binding) => binding.toJson()).toList();
 
     try {
       if (widget.onSave != null) {
-        await widget.onSave!(widget.systemObject, code);
+        await widget.onSave!(widget.systemObject, code, _bindings);
       }
       if (mounted) {
         setState(() {
@@ -261,28 +355,55 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
           child: Container(
             color: Colors.white,
             padding: const EdgeInsets.all(8),
-            child: Scrollbar(
-              controller: _scrollController,
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  scrollController: _scrollController,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  decoration: const InputDecoration(
-                    isCollapsed: true,
-                    border: InputBorder.none,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Scrollbar(
+                    controller: _scrollController,
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        scrollController: _scrollController,
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                        decoration: const InputDecoration(
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                        ),
+                        style: baseStyle,
+                      ),
+                    ),
                   ),
-                  style: baseStyle,
                 ),
-              ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 320,
+                  child: _BindingsPanel(
+                    ioVariables: _ioVariables,
+                    bindings: _bindings,
+                    availableValues: widget.availableValues,
+                    onBindingChanged: _handleBindingChange,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ],
     );
+  }
+
+  void _handleBindingChange(String slotName, SystemObject? value) {
+    final index = _bindings.indexWhere(
+        (binding) => binding.slot.toLowerCase() == slotName.toLowerCase());
+    if (index == -1) return;
+
+    setState(() {
+      _bindings[index].target = value;
+      widget.onBindingsChanged?.call(_bindings);
+    });
   }
 }
 
@@ -329,5 +450,134 @@ class PlainEnglishEditingController extends TextEditingController {
     }
 
     return TextSpan(style: style, children: children);
+  }
+}
+
+class _PlainEnglishVariable {
+  _PlainEnglishVariable({required this.name, this.kind});
+
+  final String name;
+  final String? kind;
+}
+
+class _BindingsPanel extends StatelessWidget {
+  const _BindingsPanel({
+    required this.ioVariables,
+    required this.bindings,
+    required this.availableValues,
+    required this.onBindingChanged,
+  });
+
+  final List<_PlainEnglishVariable> ioVariables;
+  final List<BindingAssignment> bindings;
+  final List<SystemObject> availableValues;
+  final void Function(String slot, SystemObject? value) onBindingChanged;
+
+  BindingAssignment? _findBinding(String slot) {
+    return bindings
+        .cast<BindingAssignment?>()
+        .firstWhere(
+          (binding) =>
+              binding != null && binding.slot.toLowerCase() == slot.toLowerCase(),
+          orElse: () => null,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.grey.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Bindings de PlainEnglish',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Asocia Inputs/Outputs del script con Values del sistema.',
+              style: TextStyle(color: Colors.black54, fontSize: 12),
+            ),
+            const Divider(height: 16),
+            if (ioVariables.isEmpty)
+              const Expanded(
+                child: Center(
+                  child: Text('Declara "Input" o "Output" para crear bindings'),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  itemBuilder: (context, index) {
+                    final variable = ioVariables[index];
+                    final binding = _findBinding(variable.name);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Chip(
+                              label: Text(
+                                (variable.kind ?? 'slot').toUpperCase(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white),
+                              ),
+                              backgroundColor:
+                                  (variable.kind ?? '').toLowerCase() == 'output'
+                                      ? Colors.orange
+                                      : Colors.blue,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                variable.name,
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<SystemObject?>(
+                          isExpanded: true,
+                          value: binding?.target,
+                          decoration: const InputDecoration(
+                            labelText: 'Value asociado',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem<SystemObject?>(
+                              value: null,
+                              child: Text('Sin binding'),
+                            ),
+                            ...availableValues.map(
+                              (value) => DropdownMenuItem<SystemObject?>(
+                                value: value,
+                                child: Text('${value.name} (${value.type})'),
+                              ),
+                            )
+                          ],
+                          onChanged: (value) => onBindingChanged(
+                            variable.name,
+                            value,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemCount: ioVariables.length,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
