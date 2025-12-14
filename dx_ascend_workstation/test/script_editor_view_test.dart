@@ -30,9 +30,12 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Idle'), findsOneWidget);
-      expect(find.textContaining('Línea Sin datos'), findsOneWidget);
-      expect(find.textContaining('TS Sin datos'), findsOneWidget);
+      expect(find.text('Programas detenidos'), findsOneWidget);
+      expect(find.textContaining('Línea sin datos'), findsOneWidget);
+      expect(find.textContaining('TS sin datos'), findsOneWidget);
+      expect(scriptObject.isRunning, isFalse);
+      expect(scriptObject.isHalted, isFalse);
+      expect(scriptObject.runtimeState, 'stopped');
 
       runtimeController.add(const RuntimeStatus(
         isRunning: true,
@@ -41,18 +44,33 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.text('Running'), findsOneWidget);
+      expect(find.text('Programas corriendo'), findsOneWidget);
       expect(find.text('Línea 7 · TS 42'), findsOneWidget);
+      expect(scriptObject.isRunning, isTrue);
+      expect(scriptObject.isHalted, isFalse);
+      expect(scriptObject.runtimeState, 'running');
 
       runtimeController.add(const RuntimeStatus(
         isRunning: false,
         currentLine: 11,
         currentTimestamp: null,
+        programs: [
+          ProgramRuntimeStatus(
+            id: 1,
+            name: 'Test Script',
+            isRunning: false,
+            isHalted: true,
+            errors: ['runtime error'],
+          ),
+        ],
       ));
       await tester.pump();
 
-      expect(find.text('Idle'), findsOneWidget);
-      expect(find.text('Línea 11 · TS Sin datos'), findsOneWidget);
+      expect(find.textContaining('detenidos por falla'), findsOneWidget);
+      expect(find.textContaining('Test Script: runtime error'), findsOneWidget);
+      expect(scriptObject.isRunning, isFalse);
+      expect(scriptObject.isHalted, isTrue);
+      expect(scriptObject.runtimeState, 'halted');
 
       await runtimeController.close();
     });
