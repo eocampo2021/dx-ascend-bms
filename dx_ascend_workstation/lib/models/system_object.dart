@@ -60,4 +60,15 @@ class SystemObject {
     if (value is String && value.isNotEmpty) return value;
     return null;
   }
+
+  bool get isRunning => properties['isRunning'] == true;
+
+  bool get isHalted => properties['isHalted'] == true;
+
+  String get runtimeState => properties['runtimeState']?.toString() ??
+      (isHalted
+          ? 'halted'
+          : isRunning
+              ? 'running'
+              : 'stopped');
 }

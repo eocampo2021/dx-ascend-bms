@@ -33,6 +33,7 @@ class ProgramRuntimeStatus {
     required this.id,
     required this.name,
     required this.isRunning,
+    this.isHalted = false,
     this.type,
     this.errors = const [],
   });
@@ -41,6 +42,7 @@ class ProgramRuntimeStatus {
   final String name;
   final String? type;
   final bool isRunning;
+  final bool isHalted;
   final List<String> errors;
 
   bool get hasErrors => errors.isNotEmpty;
@@ -59,9 +61,16 @@ class ProgramRuntimeStatus {
       name: json['name']?.toString() ?? 'Program',
       type: json['type']?.toString(),
       isRunning: json['isRunning'] == true || json['running'] == true,
+      isHalted: json['isHalted'] == true || json['halted'] == true,
       errors: parsedErrors,
     );
   }
+
+  String get runtimeState => isHalted
+      ? 'halted'
+      : isRunning
+          ? 'running'
+          : 'stopped';
 }
 
 class ScriptEditorView extends StatefulWidget {
@@ -160,6 +169,26 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
   }
 
   void _updateRuntimeStatus(RuntimeStatus status) {
+    ProgramRuntimeStatus? programStatus;
+    for (final program in status.programs) {
+      if (program.id == widget.systemObject.id) {
+        programStatus = program;
+        break;
+      }
+    }
+
+    final bool isRunning = programStatus?.isRunning ?? status.isRunning;
+    final bool isHalted = programStatus?.isHalted ??
+        (!status.isRunning && (status.errorMessage?.isNotEmpty ?? false));
+
+    widget.systemObject.properties['isRunning'] = isRunning;
+    widget.systemObject.properties['isHalted'] = isHalted;
+    widget.systemObject.properties['runtimeState'] = isHalted
+        ? 'halted'
+        : isRunning
+            ? 'running'
+            : 'stopped';
+
     if (!mounted) {
       _runtimeStatus = status;
       return;
@@ -523,30 +552,39 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
   Widget _buildRuntimeStatus() {
     final programs = _runtimeStatus.programs;
     final programsWithErrors = programs.where((p) => p.hasErrors).toList();
+    final haltedPrograms = programs.where((p) => p.isHalted).toList();
     final hasConnectionIssue =
         (_runtimeStatus.errorMessage ?? '').trim().isNotEmpty && programs.isEmpty;
-    final isRunning = _runtimeStatus.isRunning && programsWithErrors.isEmpty;
+    final isRunning =
+        _runtimeStatus.isRunning && programsWithErrors.isEmpty && haltedPrograms.isEmpty;
+    final isHalted = haltedPrograms.isNotEmpty;
     final icon = hasConnectionIssue
         ? Icons.cloud_off
-        : programsWithErrors.isNotEmpty
-            ? Icons.error_outline
-            : isRunning
-                ? Icons.play_circle_fill
-                : Icons.stop_circle_outlined;
+        : isHalted
+            ? Icons.pause_circle_filled
+            : programsWithErrors.isNotEmpty
+                ? Icons.error_outline
+                : isRunning
+                    ? Icons.play_circle_fill
+                    : Icons.stop_circle_outlined;
     final color = hasConnectionIssue
         ? Colors.red
-        : programsWithErrors.isNotEmpty
-            ? Colors.orange
-            : isRunning
-                ? Colors.blueAccent
-                : Colors.grey;
+        : isHalted
+            ? Colors.red
+            : programsWithErrors.isNotEmpty
+                ? Colors.orange
+                : isRunning
+                    ? Colors.blueAccent
+                    : Colors.grey;
     final stateLabel = hasConnectionIssue
         ? 'Sin conexión'
-        : programsWithErrors.isNotEmpty
-            ? '${programsWithErrors.length} programas con errores'
-            : isRunning
-                ? 'Programas corriendo'
-                : 'Programas detenidos';
+        : isHalted
+            ? '${haltedPrograms.length} programas detenidos por falla'
+            : programsWithErrors.isNotEmpty
+                ? '${programsWithErrors.length} programas con errores'
+                : isRunning
+                    ? 'Programas corriendo'
+                    : 'Programas detenidos';
     final lineLabel = _runtimeStatus.currentLine != null
         ? 'Línea ${_runtimeStatus.currentLine}'
         : 'Línea sin datos';
@@ -555,11 +593,15 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
         : 'TS sin datos';
     final subtitle = hasConnectionIssue
         ? _runtimeStatus.errorMessage ?? 'No se pudo consultar el estado'
-        : programsWithErrors.isNotEmpty
-            ? programsWithErrors
-                .map((p) => '${p.name}: ${p.errors.first}')
+        : isHalted
+            ? haltedPrograms
+                .map((p) => '${p.name}: ${p.errors.isNotEmpty ? p.errors.first : 'Detenido por falla'}')
                 .join(' · ')
-            : '$lineLabel · $tsLabel';
+            : programsWithErrors.isNotEmpty
+                ? programsWithErrors
+                    .map((p) => '${p.name}: ${p.errors.first}')
+                    .join(' · ')
+                : '$lineLabel · $tsLabel';
 
     return InkWell(
       onTap: () => _showProgramStatusDialog(),
@@ -615,14 +657,19 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
                     itemBuilder: (_, index) {
                       final program = programs[index];
                       final hasErrors = program.hasErrors;
+                      final isHalted = program.isHalted;
                       final icon = hasErrors
                           ? Icons.error_outline
-                          : (program.isRunning
-                              ? Icons.check_circle_outline
-                              : Icons.pause_circle_outline);
+                          : isHalted
+                              ? Icons.pause_circle_filled
+                              : (program.isRunning
+                                  ? Icons.check_circle_outline
+                                  : Icons.pause_circle_outline);
                       final color = hasErrors
                           ? Colors.red
-                          : (program.isRunning ? Colors.green : Colors.grey);
+                          : isHalted
+                              ? Colors.redAccent
+                              : (program.isRunning ? Colors.green : Colors.grey);
 
                       return ListTile(
                         dense: true,
@@ -630,16 +677,33 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
                         title: Text(program.name),
                         subtitle: hasErrors
                             ? Text(program.errors.join(' · '))
-                            : const Text('Listo para ejecución'),
+                            : isHalted
+                                ? const Text('Detenido por falla en runtime')
+                                : const Text('Listo para ejecución'),
                         trailing: hasErrors
                             ? const Chip(
                                 label: Text('Error',
                                     style: TextStyle(color: Colors.white)),
                                 backgroundColor: Colors.red,
                               )
-                            : const Chip(
-                                label: Text('OK'),
-                                backgroundColor: Color(0xFFE0F2F1),
+                            : Chip(
+                                label: Text(
+                                  isHalted
+                                      ? 'Halted'
+                                      : (program.isRunning ? 'Running' : 'Idle'),
+                                  style: TextStyle(
+                                    color: isHalted
+                                        ? Colors.white
+                                        : (program.isRunning
+                                            ? Colors.green.shade900
+                                            : Colors.black87),
+                                  ),
+                                ),
+                                backgroundColor: isHalted
+                                    ? Colors.red
+                                    : (program.isRunning
+                                        ? const Color(0xFFE0F2F1)
+                                        : Colors.grey.shade200),
                               ),
                       );
                     },
