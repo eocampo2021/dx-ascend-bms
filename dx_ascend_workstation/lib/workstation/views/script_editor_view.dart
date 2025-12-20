@@ -722,7 +722,7 @@ class _ScriptEditorViewState extends State<ScriptEditorView> {
 }
 
 class PlainEnglishEditingController extends TextEditingController {
-  PlainEnglishEditingController({String? text}) : super(text: text);
+  PlainEnglishEditingController({super.text});
 
   static final RegExp _tokenMatcher = RegExp(
     r'(#.*$|//.*$)|\b(Numeric|Input|Output|Return|If|Else|Then|End|print)\b|\b[0-9]+(?:\.[0-9]+)?\b',
@@ -857,9 +857,9 @@ class _BindingsPanel extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        DropdownButtonFormField<SystemObject?>(
-                          isExpanded: true,
-                          value: binding?.target,
+                          DropdownButtonFormField<SystemObject?>(
+                            isExpanded: true,
+                            initialValue: binding?.target,
                           decoration: const InputDecoration(
                             labelText: 'Value asociado',
                             border: OutlineInputBorder(),

@@ -383,7 +383,7 @@ class _ScriptEditorState extends State<ScriptEditor>
               label: 'Debug',
               children: [
                 _ToolbarButton(
-                  icon: Icons.bug_play,
+                  icon: Icons.bug_report,
                   label: 'Start',
                   onPressed: () =>
                       _focusQuickAction('Iniciar sesión de debugging'),
@@ -443,7 +443,7 @@ class _ScriptEditorState extends State<ScriptEditor>
 
   Widget _buildStatusBar(ThemeData theme) {
     return Container(
-      color: theme.colorScheme.surfaceVariant,
+      color: theme.colorScheme.surfaceContainerHighest,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
@@ -509,18 +509,18 @@ class _ScriptEditorState extends State<ScriptEditor>
                 style: theme.textTheme.titleSmall,
               ),
               const Spacer(),
-              if (_isSaving)
-                Row(
-                  children: const [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 6),
-                    Text('Guardando...'),
-                  ],
-                ),
+                if (_isSaving)
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 6),
+                      Text('Guardando...'),
+                    ],
+                  ),
             ],
           ),
         ),
@@ -581,10 +581,10 @@ class _ScriptEditorState extends State<ScriptEditor>
       children: [
         Container(
           padding: const EdgeInsets.all(10),
-          color: theme.colorScheme.surfaceVariant,
-          child: Column(
+          color: theme.colorScheme.surfaceContainerHighest,
+          child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text('Bindings', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 4),
               Text(
@@ -1006,7 +1006,6 @@ class _ScriptVariable {
     required this.name,
     required this.dataType,
     required this.qualifier,
-    this.startValue,
   });
 
   final String name;

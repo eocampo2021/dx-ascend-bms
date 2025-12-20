@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/graphic_widget.dart';
-import '../models/screen.dart';
 import '../models/system_object.dart';
 import 'api_config.dart';
 import 'models/binding_assignment.dart';
@@ -62,19 +62,19 @@ class _MainShellState extends State<MainShell> {
       label: 'Nuevo valor digital',
       type: 'Digital Value',
       description: 'Punto digital para estados ON/OFF',
-      properties: const {'kind': 'digital', 'default': false},
+      properties: {'kind': 'digital', 'default': false},
     ),
     _CreateAction(
       label: 'Nuevo valor analógico',
       type: 'Analog Value',
       description: 'Punto analógico con valores numéricos',
-      properties: const {'kind': 'analog', 'default': 0.0},
+      properties: {'kind': 'analog', 'default': 0.0},
     ),
     _CreateAction(
       label: 'Nuevo valor de texto',
       type: 'String Value',
       description: 'Punto de texto para mensajes o etiquetas',
-      properties: const {'kind': 'string', 'default': ''},
+      properties: {'kind': 'string', 'default': ''},
     ),
   ];
 
@@ -123,7 +123,7 @@ class _MainShellState extends State<MainShell> {
         throw Exception('Error API');
       }
     } catch (e) {
-      print("Error conectando al backend: $e");
+      debugPrint("Error conectando al backend: $e");
       // DATA MOCKUP DE RESPALDO (Si el backend no corre localmente)
       setState(() {
         _treeData = _getMockData();
@@ -533,17 +533,17 @@ class _MainShellState extends State<MainShell> {
     final bool canCreateValues =
         node.type.toLowerCase() == 'server' || node.type.toLowerCase() == 'folder';
     final entries = <PopupMenuEntry<dynamic>>[
-      PopupMenuItem(
+      const PopupMenuItem(
         value: 'rename',
-        child: const Text('Renombrar objeto'),
+        child: Text('Renombrar objeto'),
       ),
-      PopupMenuItem(
+      const PopupMenuItem(
         value: 'bindings',
-        child: const Text('Editar bindings'),
+        child: Text('Editar bindings'),
       ),
-      PopupMenuItem(
+      const PopupMenuItem(
         value: 'delete',
-        child: const Text('Eliminar objeto'),
+        child: Text('Eliminar objeto'),
       ),
       if (actions.isNotEmpty || canCreateValues) const PopupMenuDivider(),
       ...actions
@@ -552,8 +552,7 @@ class _MainShellState extends State<MainShell> {
               value: action,
               child: Text(action.label),
             ),
-          )
-          .toList(),
+          ),
       if (canCreateValues)
         PopupMenuItem<_CreateAction>(
           padding: EdgeInsets.zero,
@@ -566,8 +565,7 @@ class _MainShellState extends State<MainShell> {
                     value: valueAction,
                     child: Text(valueAction.label),
                   ),
-                )
-                .toList(),
+                ),
             child: const ListTile(
               dense: true,
               leading: Icon(Icons.category_outlined),
@@ -620,51 +618,55 @@ class _MainShellState extends State<MainShell> {
         body: jsonEncode(payload),
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final decoded = jsonDecode(response.body);
-        final Map<String, dynamic> data = decoded is Map<String, dynamic>
-            ? {...decoded}
-            : <String, dynamic>{};
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final decoded = jsonDecode(response.body);
+          final Map<String, dynamic> data = decoded is Map<String, dynamic>
+              ? {...decoded}
+              : <String, dynamic>{};
 
         data['parent_id'] ??= parent.id;
         data['name'] ??= payload['name'];
         data['type'] ??= payload['type'];
         data['properties'] ??= payload['properties'];
 
-        final created = SystemObject.fromJson({
-          'id': data['id'] ?? DateTime.now().millisecondsSinceEpoch,
-          ...data,
-        });
+          final created = SystemObject.fromJson({
+            'id': data['id'] ?? DateTime.now().millisecondsSinceEpoch,
+            ...data,
+          });
 
-        setState(() {
-          _attachChildToTree(parent.id, created);
-        });
+          if (!mounted) return;
+          setState(() {
+            _attachChildToTree(parent.id, created);
+          });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${action.label} creado en ${parent.name}')),
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${action.label} creado en ${parent.name}')),
+          );
+        } else {
+          throw Exception('Status ${response.statusCode}');
+        }
+      } catch (e) {
+        // Fallback local cuando no hay backend: añade el objeto de manera temporal
+        final localObj = SystemObject(
+          id: DateTime.now().millisecondsSinceEpoch,
+          parentId: parent.id,
+          name: '$name (local)',
+          type: action.type,
+          properties: action.properties ?? {},
         );
-      } else {
-        throw Exception('Status ${response.statusCode}');
-      }
-    } catch (e) {
-      // Fallback local cuando no hay backend: añade el objeto de manera temporal
-      final localObj = SystemObject(
-        id: DateTime.now().millisecondsSinceEpoch,
-        parentId: parent.id,
-        name: '$name (local)',
-        type: action.type,
-        properties: action.properties ?? {},
-      );
 
-      setState(() {
-        _attachChildToTree(parent.id, localObj);
-      });
+        if (!mounted) return;
+        setState(() {
+          _attachChildToTree(parent.id, localObj);
+        });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Creado en modo local por falta de conexión: ${action.label}'),
-        ),
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Creado en modo local por falta de conexión: ${action.label}'),
+          ),
       );
     }
   }
@@ -758,36 +760,38 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Future<void> _renameSystemObject(SystemObject obj, String newName) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$apiBaseUrl/system-objects/${obj.id}'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': newName}),
-      );
+    Future<void> _renameSystemObject(SystemObject obj, String newName) async {
+      try {
+        final response = await http.put(
+          Uri.parse('$apiBaseUrl/system-objects/${obj.id}'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'name': newName}),
+        );
 
-      if (response.statusCode != 200) {
-        throw Exception('Status ${response.statusCode}');
+        if (response.statusCode != 200) {
+          throw Exception('Status ${response.statusCode}');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'No se pudo actualizar en el servidor ($e). El cambio es local.'),
+          ),
+        );
+      } finally {
+        if (!mounted) return;
+        setState(() {
+          _updateObjectNameInTree(obj.id, newName);
+        });
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'No se pudo actualizar en el servidor ($e). El cambio es local.'),
-        ),
-      );
-    } finally {
-      setState(() {
-        _updateObjectNameInTree(obj.id, newName);
-      });
     }
-  }
 
-  Future<void> _deleteSystemObject(SystemObject obj) async {
-    String message = 'Objeto eliminado correctamente.';
-    bool removedFromTree = false;
+    Future<void> _deleteSystemObject(SystemObject obj) async {
+      String message = 'Objeto eliminado correctamente.';
+      bool removedFromTree = false;
 
-    try {
+      try {
       final response =
           await http.delete(Uri.parse('$apiBaseUrl/system-objects/${obj.id}'));
       if (response.statusCode != 200 &&
@@ -795,14 +799,15 @@ class _MainShellState extends State<MainShell> {
           response.statusCode != 202) {
         throw Exception('Status ${response.statusCode}');
       }
-    } catch (e) {
-      message = 'No se pudo eliminar en el servidor ($e). El cambio es local.';
-    } finally {
-      setState(() {
-        final removed = _removeSystemObjectFromTree(obj.id);
-        if (removed != null) {
-          removedFromTree = true;
-          final removedIds = _collectIds(removed);
+      } catch (e) {
+        message = 'No se pudo eliminar en el servidor ($e). El cambio es local.';
+      } finally {
+        if (!mounted) return;
+        setState(() {
+          final removed = _removeSystemObjectFromTree(obj.id);
+          if (removed != null) {
+            removedFromTree = true;
+            final removedIds = _collectIds(removed);
           _openTabs.removeWhere((tab) => removedIds.contains(tab.object.id));
           if (_selectedObject != null &&
               removedIds.contains(_selectedObject!.id)) {
@@ -811,18 +816,19 @@ class _MainShellState extends State<MainShell> {
           if (_selectedTabIndex >= _openTabs.length) {
             _selectedTabIndex =
                 _openTabs.isNotEmpty ? _openTabs.length - 1 : 0;
+            }
           }
+        });
+
+        if (!removedFromTree) {
+          message = 'No se encontró el objeto en el árbol.';
         }
-      });
 
-      if (!removedFromTree) {
-        message = 'No se encontró el objeto en el árbol.';
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
     }
-  }
 
   SystemObject? _removeSystemObjectFromTree(int id,
       [List<SystemObject>? nodes]) {
@@ -883,6 +889,7 @@ class _MainShellState extends State<MainShell> {
       }
     } catch (e) {
       savedRemotely = false;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -890,10 +897,12 @@ class _MainShellState extends State<MainShell> {
         ),
       );
     } finally {
+      if (!mounted) return;
       setState(() {
         _applyPropertiesToTree(obj.id, properties);
       });
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(savedRemotely
@@ -1023,7 +1032,7 @@ class _MainShellState extends State<MainShell> {
   Widget _buildFolderListView(SystemObject folder) {
     final rows = folder.children;
 
-    String _formatValue(SystemObject obj) {
+    String formatValue(SystemObject obj) {
       final props = obj.properties;
       final dynamic value = props['value'] ?? props['default'];
       if (value is num) return value.toString();
@@ -1031,17 +1040,17 @@ class _MainShellState extends State<MainShell> {
       return value?.toString() ?? '-';
     }
 
-    String _formatStatus(SystemObject obj) {
+    String formatStatus(SystemObject obj) {
       final status = obj.properties['status'] ?? 'Enabled';
       return status.toString();
     }
 
-    String _formatForce(SystemObject obj) {
+    String formatForce(SystemObject obj) {
       final force = obj.properties['forceStatus'] ?? obj.properties['force'];
       return (force ?? 'Not Forced').toString();
     }
 
-    String _formatBinding(SystemObject obj) {
+    String formatBinding(SystemObject obj) {
       final props = obj.properties;
       final hasBinding = props['bindingActive'] == true ||
           props['writingFromBinding'] == true ||
@@ -1099,13 +1108,13 @@ class _MainShellState extends State<MainShell> {
                                           Text(child.name),
                                         ],
                                       )),
-                                      DataCell(Text(
-                                          child.properties['description']?.toString() ??
-                                              child.type)),
-                                      DataCell(Text(_formatValue(child))),
-                                      DataCell(Text(_formatStatus(child))),
-                                      DataCell(Text(_formatForce(child))),
-                                      DataCell(Text(_formatBinding(child))),
+                                    DataCell(Text(
+                                            child.properties['description']?.toString() ??
+                                                child.type)),
+                                        DataCell(Text(formatValue(child))),
+                                        DataCell(Text(formatStatus(child))),
+                                        DataCell(Text(formatForce(child))),
+                                        DataCell(Text(formatBinding(child))),
                                     ],
                                   ),
                                 )
@@ -1307,14 +1316,14 @@ class _MainShellState extends State<MainShell> {
       decoration: BoxDecoration(
         color: Colors.white,
         border: const Border(left: BorderSide(color: Color(0xFFC0C0C0))),
-        boxShadow: _isRightPanelCollapsed
-            ? null
-            : [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 6,
-                    offset: const Offset(-2, 0))
-              ],
+          boxShadow: _isRightPanelCollapsed
+              ? null
+              : [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 6,
+                      offset: const Offset(-2, 0))
+                ],
       ),
       child: _isRightPanelCollapsed
           ? InkWell(

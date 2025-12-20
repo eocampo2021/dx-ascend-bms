@@ -156,17 +156,17 @@ class _ValuePropertiesEditorState extends State<ValuePropertiesEditor> {
     required ValueChanged<String?> onChanged,
   }) {
     return Row(
-      children: [
-        SizedBox(width: 80, child: Text(label)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            value: value,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: items
-                .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
-                .toList(),
-            onChanged: onChanged,
+        children: [
+          SizedBox(width: 80, child: Text(label)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: value,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: items
+                  .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: onChanged,
           ),
         )
       ],
