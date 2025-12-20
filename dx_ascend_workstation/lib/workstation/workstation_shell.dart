@@ -565,7 +565,8 @@ class _MainShellState extends State<MainShell> {
                     value: valueAction,
                     child: Text(valueAction.label),
                   ),
-                ),
+                )
+                .toList(),
             child: const ListTile(
               dense: true,
               leading: Icon(Icons.category_outlined),
