@@ -54,14 +54,14 @@ class ScreenDesigner extends StatefulWidget {
   final double canvasHeight;
 
   const ScreenDesigner({
-    Key? key,
+    super.key,
     required this.widgets,
     required this.onWidgetChanged,
     this.canvasWidth = 800,
     this.canvasHeight = 450,
     this.onWidgetSelected,
     this.selectedWidgetId,
-  }) : super(key: key);
+  });
 
   @override
   State<ScreenDesigner> createState() => _ScreenDesignerState();
@@ -121,7 +121,7 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
             height: widget.canvasHeight * scale,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               boxShadow: const [
                 BoxShadow(
                   color: Colors.black87,
@@ -180,7 +180,7 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
         borderColor = const Color(0xFF4DD0E1);
         break;
       default:
-        borderColor = Colors.white.withOpacity(0.55);
+        borderColor = Colors.white.withValues(alpha: 0.55);
         break;
     }
 
@@ -247,7 +247,7 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
                         '[${w.type.toUpperCase()}]',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -257,14 +257,14 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
                     'x=${w.x.toStringAsFixed(0)}  y=${w.y.toStringAsFixed(0)}',
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),
                   Text(
                     'w=${w.width.toStringAsFixed(0)}  h=${w.height.toStringAsFixed(0)}',
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.white.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -296,7 +296,7 @@ class _ScreenDesignerState extends State<ScreenDesigner> {
                     color: borderColor,
                     boxShadow: [
                       BoxShadow(
-                        color: borderColor.withOpacity(0.8),
+                        color: borderColor.withValues(alpha: 0.8),
                         blurRadius: 12,
                       ),
                     ],

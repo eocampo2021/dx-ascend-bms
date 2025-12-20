@@ -25,7 +25,6 @@ class GraphicsEditorView extends StatefulWidget {
 }
 
 class _GraphicsEditorViewState extends State<GraphicsEditorView> {
-  List<Screen> _screens = [];
   List<GraphicWidget> _widgets = [];
   Screen? _selectedScreen;
   GraphicWidget? _selectedWidget;
@@ -64,15 +63,14 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         oldWidget.systemObject.screenId != widget.systemObject.screenId ||
         oldWidget.systemObject.screenRoute != widget.systemObject.screenRoute ||
         oldWidget.systemObject.name != widget.systemObject.name) {
-      setState(() {
-        _selectedScreen = null;
-        _widgets = [];
-        _selectedWidget = null;
-        _selectedWidgetType = null;
-        _screens = [];
-        _loadingWidgets = false;
-        _error = null;
-      });
+        setState(() {
+          _selectedScreen = null;
+          _widgets = [];
+          _selectedWidget = null;
+          _selectedWidgetType = null;
+          _loadingWidgets = false;
+          _error = null;
+        });
       widget.onWidgetSelected?.call(null);
       _loadScreenForTab();
     }
@@ -114,19 +112,16 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         initial = await _fetchScreenById(targetId);
       }
 
-      if (initial == null && targetRoute != null) {
-        initial = await _fetchScreenByRoute(targetRoute);
-      }
+        if (initial == null && targetRoute != null) {
+          initial = await _fetchScreenByRoute(targetRoute);
+        }
 
-      if (initial == null) {
-        initial = await _fetchScreenByName(widget.systemObject.name);
-      }
+        initial ??= await _fetchScreenByName(widget.systemObject.name);
 
       setState(() {
-        _selectedScreen = initial;
-        _screens = initial != null ? [initial] : [];
-        _loadingScreens = false;
-      });
+          _selectedScreen = initial;
+          _loadingScreens = false;
+        });
 
       if (initial != null) {
         await _loadWidgets(initial.id, allowMock: true);
@@ -136,14 +131,13 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
         });
       }
     } catch (e) {
-      final mockScreens = _buildMockScreens();
-      setState(() {
-        _screens = mockScreens;
-        _selectedScreen = mockScreens.isNotEmpty ? mockScreens.first : null;
-        _loadingScreens = false;
-        _error = 'No se pudieron cargar las pantallas: $e. '
-            'Se muestran datos de ejemplo.';
-      });
+        final mockScreens = _buildMockScreens();
+        setState(() {
+          _selectedScreen = mockScreens.isNotEmpty ? mockScreens.first : null;
+          _loadingScreens = false;
+          _error = 'No se pudieron cargar las pantallas: $e. '
+              'Se muestran datos de ejemplo.';
+        });
 
       if (_selectedScreen != null) {
         await _loadWidgets(_selectedScreen!.id, allowMock: true);
@@ -597,11 +591,11 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                                 itemBuilder: (context, index) {
                                   final widget = _widgets[index];
                                   final isSelected = widget.id == _selectedWidget?.id;
-                                  return ListTile(
-                                    selected: isSelected,
-                                    selectedColor: Colors.green,
-                                    selectedTileColor:
-                                        Colors.green.withOpacity(0.1),
+                                    return ListTile(
+                                      selected: isSelected,
+                                      selectedColor: Colors.green,
+                                      selectedTileColor:
+                                          Colors.green.withValues(alpha: 0.1),
                                     title: Text(widget.name),
                                     subtitle: Text(
                                         '${widget.type} • (${widget.x},${widget.y})'),
@@ -627,8 +621,8 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
                     ),
                     child: Stack(
                       children: [
-                        GridPaper(
-                          color: Colors.grey.withOpacity(0.3),
+                          GridPaper(
+                            color: Colors.grey.withValues(alpha: 0.3),
                           interval: 20,
                           divisions: 1,
                           subdivisions: 1,
@@ -809,7 +803,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     return SizedBox(
       width: 140,
       child: DropdownButtonFormField<String>(
-        value: value,
+        initialValue: value,
         decoration: const InputDecoration(
           isDense: true,
           labelText: 'Type',
@@ -832,7 +826,7 @@ class _GraphicsEditorViewState extends State<GraphicsEditorView> {
     return SizedBox(
       width: 260,
       child: DropdownButtonFormField<SystemObject?>(
-        value: _selectedBindingValue,
+        initialValue: _selectedBindingValue,
         isExpanded: true,
         decoration: const InputDecoration(
           isDense: true,

@@ -13,8 +13,8 @@ class EboRibbonBar extends StatelessWidget {
           bottom: BorderSide(color: Color(0xFFC0C0C0), width: 1),
         ),
       ),
-      child: Row(
-        children: const [
+      child: const Row(
+        children: [
           Icon(Icons.dashboard_customize, size: 24),
           SizedBox(width: 12),
           Text(
